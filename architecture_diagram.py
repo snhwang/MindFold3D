@@ -10,6 +10,8 @@ Usage:
     python architecture_diagram.py
 """
 
+import os
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
@@ -208,6 +210,19 @@ def main():
             rotation=90, ha="left", va="center")
 
     plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+
+    # Save publication-quality outputs before displaying.
+    # PDF is vector (infinite resolution); the PNG is 600 DPI for journals
+    # that require raster.
+    out_dir = os.path.join(os.path.dirname(__file__), "docs", "figures")
+    os.makedirs(out_dir, exist_ok=True)
+    pdf_path = os.path.join(out_dir, "Figure_1_System_Architecture.pdf")
+    png_path = os.path.join(out_dir, "Figure_1_System_Architecture.png")
+    fig.savefig(pdf_path, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(png_path, dpi=600, bbox_inches="tight", pad_inches=0.02)
+    print(f"Saved {pdf_path}")
+    print(f"Saved {png_path}")
+
     print("Displaying architecture diagram. Close window when done.")
     plt.show()
 
