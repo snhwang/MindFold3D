@@ -869,6 +869,21 @@
     import * as THREE from 'https://esm.sh/three@0.155.0';
     import { TrackballControls } from 'https://esm.sh/three@0.155.0/examples/jsm/controls/TrackballControls.js';
     let sessionEnded = false;
+    let _nextQuestionPromise = null;
+
+    function prefetchNextQuestion() {
+      const token = localStorage.getItem('token');
+      if (!token || sessionEnded) return;
+      const includeMirror = document.getElementById('mirror-mode')?.checked || false;
+      const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
+      const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
+      const expertMode = document.getElementById('expert-mode')?.checked || false;
+      _nextQuestionPromise = fetch(
+        `/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&expert_mode=${expertMode}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      ).then(r => r.ok ? r.json() : null).catch(() => null);
+    }
+
 
     // Game difficulty settings
     let difficultyLevel = 1;
@@ -1238,26 +1253,30 @@
         }
 
         console.log("*** DEBUG: Loading new question with token:", token.substring(0, 10) + "...");
-        const includeMirror = document.getElementById('mirror-mode')?.checked || false;
-        const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
-        const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
-        const generationMode = 'skeleton';
-        const expertMode = document.getElementById('expert-mode')?.checked || false;
-        const res = await fetch(`/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&generation_mode=${generationMode}&expert_mode=${expertMode}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
 
-        console.log("*** DEBUG: API response status:", res.status);
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("*** DEBUG: API error response:", errorText);
-          throw new Error(`API error: ${res.status} - ${errorText}`);
+        let data = null;
+        if (_nextQuestionPromise) {
+          console.log("*** DEBUG: Awaiting pre-fetched question");
+          data = await _nextQuestionPromise;
+          _nextQuestionPromise = null;
         }
-
-        const data = await res.json();
+        if (!data || !data.target) {
+          console.log("*** DEBUG: Fetching question from API");
+          const includeMirror = document.getElementById('mirror-mode')?.checked || false;
+          const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
+          const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
+          const expertMode = document.getElementById('expert-mode')?.checked || false;
+          const res = await fetch(`/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&expert_mode=${expertMode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          console.log("*** DEBUG: API response status:", res.status);
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error("*** DEBUG: API error response:", errorText);
+            throw new Error(`API error: ${res.status} - ${errorText}`);
+          }
+          data = await res.json();
+        }
         console.log("*** DEBUG: API response data:", data);
 
         if (!data.target || !data.target.voxels) {
@@ -1454,6 +1473,8 @@
     window.questionStartTime = null;
 
     window.selectChoice = async function (choiceId, targetId) {
+      prefetchNextQuestion();
+
       // Calculate response time
       const responseTime = window.questionStartTime ? ((Date.now() - window.questionStartTime) / 1000) : 1.0;
 
