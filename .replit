@@ -7,7 +7,8 @@ channel = "stable-23_11"
 packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "gobject-introspection", "gtk3", "libiconv", "libxcrypt", "pkg-config", "qhull", "rustc", "tcl", "tk"]
 
 [deployment]
-run = ["sh", "-c", "python main.py"]
+run = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--workers", "2"]
+deploymentTarget = "autoscale"
 
 [[ports]]
 localPort = 3001
@@ -15,7 +16,7 @@ externalPort = 80
 
 [[ports]]
 localPort = 5000
-externalPort = 80
+externalPort = 5000
 
 [agent]
 expertMode = true
@@ -38,7 +39,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py"
+args = "uvicorn main:app --host 0.0.0.0 --port 5000"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
