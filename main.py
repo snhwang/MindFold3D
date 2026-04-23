@@ -32,7 +32,7 @@ import auth_routes
 import models
 from database import engine, SessionLocal
 from shape_features import ShapeFeatureSet
-from shape_generation import generate_shape_from_features, generate_mirror_reflection, generate_part_permuted_distractor, analyze_shape_features, canonical_voxel_form, nudge_voxels_until_unique
+from shape_generation import generate_shape_from_features, generate_mirror_reflection, generate_part_permuted_distractor, analyze_shape_features, canonical_voxel_form, nudge_voxels_until_unique, keep_largest_component
 from skeleton_generation import generate_shape_skeleton
 from cognitive_mapping import get_difficulty_spec, get_skeleton_spec, perturb_skeleton_spec, SHAPE_DIMENSIONS, TASK_DIMENSIONS, reverse_map_cognitive_profile, cognitive_profile_to_dict
 import json
@@ -240,6 +240,22 @@ def get_multiple_choice(
               f"loops={skeleton_spec.num_loops}, spread={skeleton_spec.direction_spread}, "
               f"packing={skeleton_spec.packing}, planarity={skeleton_spec.planarity}")
 
+        # Serving-layer orphan cleanup. When the spec requested a single
+        # connected component but the skeleton fallback leaked a multi-
+        # component result (main shape + stray voxel), keep only the largest
+        # connected piece. Specs that legitimately request multi-component
+        # shapes are passed through untouched.
+        if getattr(skeleton_spec, "num_components", 1) == 1:
+            _grid_t = tuple(target_shape_data["grid_size"])
+            _largest = keep_largest_component(target_shape_data["voxels"], _grid_t)
+            if len(_largest) != len(target_shape_data["voxels"]):
+                print(f"Target had multiple components; kept largest "
+                      f"({len(_largest)}/{len(target_shape_data['voxels'])} voxels)")
+                target_shape_data["voxels"] = [list(v) for v in _largest]
+                target_shape_data["features"] = analyze_shape_features(
+                    _largest, _grid_t
+                ).model_dump(exclude_none=True)
+
         # The 'features' field includes original targets + calculated actuals
         target_features_dict = target_shape_data["features"]
 
@@ -363,6 +379,22 @@ def get_multiple_choice(
                 if len(generated_distractor_shape_data['voxels']) == 0:
                     print(f"  WARNING: Empty voxels, using fallback")
                     generated_distractor_shape_data['voxels'] = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+                # Orphan cleanup on the distractor, only when the distractor
+                # spec asked for a single component. Legitimate multi-component
+                # distractors are left intact.
+                if getattr(distractor_spec, "num_components", 1) == 1:
+                    _dgrid = tuple(generated_distractor_shape_data["grid_size"])
+                    _dlargest = keep_largest_component(
+                        generated_distractor_shape_data["voxels"], _dgrid
+                    )
+                    if len(_dlargest) != len(generated_distractor_shape_data["voxels"]):
+                        print(f"  Distractor had multiple components; kept largest "
+                              f"({len(_dlargest)}/{len(generated_distractor_shape_data['voxels'])} voxels)")
+                        generated_distractor_shape_data["voxels"] = [list(v) for v in _dlargest]
+                        generated_distractor_shape_data["features"] = analyze_shape_features(
+                            _dlargest, _dgrid
+                        ).model_dump(exclude_none=True)
 
                 distractor_voxels_canonical = canonical_voxel_form(generated_distractor_shape_data["voxels"])
                 if distractor_voxels_canonical not in accepted_canonical_voxels_for_question:

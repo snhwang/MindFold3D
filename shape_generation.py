@@ -720,6 +720,31 @@ def canonical_voxel_form(voxels) -> Tuple[Tuple[int, int, int], ...]:
     return best
 
 
+def keep_largest_component(voxels, grid_size):
+    """Return a voxel set containing only the largest connected component.
+
+    Defensive cleanup for shapes that were intended to be single-component
+    but slipped through as orphan + main shape. Accepts list-of-lists or a
+    set of tuples; returns a set of tuples.
+    """
+    if isinstance(voxels, list):
+        vset = {tuple(v) for v in voxels}
+    else:
+        vset = set(voxels)
+    if not vset or _count_components(vset, grid_size) <= 1:
+        return vset
+    seen = set()
+    largest = set()
+    for v in list(vset):
+        if v in seen:
+            continue
+        comp = _flood_fill_component(v, vset, grid_size)
+        seen |= comp
+        if len(comp) > len(largest):
+            largest = comp
+    return largest
+
+
 def nudge_voxels_until_unique(voxels: List[List[int]],
                               seen_canonicals: Set,
                               grid_size: Tuple[int, int, int],
@@ -737,6 +762,10 @@ def nudge_voxels_until_unique(voxels: List[List[int]],
     import random as _random
     vset: Set[Tuple[int, int, int]] = {tuple(v) for v in voxels}
     gx, gy, gz = grid_size
+    # Preserve the component count of the original shape so that a
+    # split-producing removal doesn't turn a single-component shape
+    # into a main piece + stray voxel.
+    target_n_components = _count_components(vset, grid_size) if vset else 1
 
     for _ in range(max_iterations):
         do_add = (len(vset) < 5) or (_random.random() < 0.5)
@@ -757,10 +786,22 @@ def nudge_voxels_until_unique(voxels: List[List[int]],
             if not placed:
                 continue
         else:
+            # Remove a voxel without increasing the component count. Try
+            # several candidates; skip any whose removal would split a
+            # component (yielding an orphan / stray voxel).
             if len(vset) <= 3:
                 continue
-            to_remove = _random.choice(list(vset))
-            vset.discard(to_remove)
+            removed = False
+            candidates = list(vset)
+            _random.shuffle(candidates)
+            for cand in candidates[:6]:
+                trial = vset - {cand}
+                if _count_components(trial, grid_size) <= target_n_components:
+                    vset = trial
+                    removed = True
+                    break
+            if not removed:
+                continue
 
         canon = canonical_voxel_form(list(vset))
         if canon not in seen_canonicals:
