@@ -1,0 +1,8 @@
+# Development dependencies
+pytest>=7.0
+pytest-cov>=4.0
+black>=23.0
+mypy>=1.0
+
+# Optional dependencies for full testing
+sqlalchemy>=2.0

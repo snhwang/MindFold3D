@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metrics-framework"
+version = "1.0.0"
+description = "A modular framework for tracking, analyzing, and visualizing performance metrics"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "MindFold3D"}
+]
+keywords = [
+    "metrics",
+    "analytics",
+    "performance",
+    "tracking",
+    "visualization",
+    "heatmap",
+    "assessment",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Monitoring",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+sql = ["sqlalchemy>=2.0"]
+all = ["sqlalchemy>=2.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/YOUR_USERNAME/metrics-framework"
+Documentation = "https://github.com/YOUR_USERNAME/metrics-framework#readme"
+Repository = "https://github.com/YOUR_USERNAME/metrics-framework.git"
+Issues = "https://github.com/YOUR_USERNAME/metrics-framework/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["metrics_framework*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
