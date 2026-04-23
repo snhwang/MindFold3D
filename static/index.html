@@ -2007,22 +2007,11 @@
 
     // Do automatic rendering check on page load
     window.addEventListener('load', function () {
-      console.log("Checking for rendering issues on page load");
-
-      // Wait a moment to let normal rendering happen
-      setTimeout(() => {
-        const target = document.getElementById('target');
-
-        // Check if target is rendered
-        if (target && target.childElementCount === 0) {
-          console.log("Auto-fixing: Target appears empty");
-
-          // Try to load question again
-          if (typeof loadQuestion === 'function') {
-            loadQuestion();
-          }
-        }
-      }, 1000);
+      // NOTE: a legacy 1-second auto-retry used to re-call loadQuestion() if
+      // the target container was still empty. On slow backends (e.g. Replit's
+      // 0.5 vCPU) the first shape generation exceeds 1 s, so the retry fired
+      // mid-request and replaced the user's visible question with a new one.
+      // Removed — loadQuestion()'s own error handling is sufficient.
 
       // IMPORTANT: Set up direct click handlers for builder buttons with robust error handling
       function setupBuilderButtons() {
