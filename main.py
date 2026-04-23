@@ -17,6 +17,7 @@ import copy
 import math
 import random
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import Body, Depends, FastAPI, Request
@@ -569,6 +570,7 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
         "task_variant": data.task_variant,
         "mirror_mode": data.mirror_mode,
         "interaction_data": data.interaction_data,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     session_data["attempts"].append(attempt_data)
