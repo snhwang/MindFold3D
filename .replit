@@ -4,7 +4,7 @@ modules = ["python-3.11:v18-20230807-322e88b"]
 
 [nix]
 channel = "stable-23_11"
-packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "gobject-introspection", "gtk3", "libiconv", "libxcrypt", "pkg-config", "qhull", "rustc", "tcl", "tk"]
+packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "gobject-introspection", "gtk3", "libiconv", "libxcrypt", "openssl", "pkg-config", "qhull", "rustc", "tcl", "tk"]
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
@@ -19,6 +19,7 @@ externalPort = 80
 
 [agent]
 expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
 
 [workflows]
 runButton = "Project"
@@ -36,10 +37,16 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
 waitForPort = 5000
 
-[workflows.workflow.metadata]
-outputType = "webview"
+[userenv]
+
+[userenv.shared]
+SECRET_KEY = "_gb1hQ40_qhVfxh2fQqoNLoBlOfvVttWrgIzKGRmhHI91lrX62rQdlFjbgHN7s-tNVmyDX6ZBK13omQRKBAb-Q"
+ACCESS_TOKEN_EXPIRE_MINUTES = "30"
