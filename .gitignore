@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.pytest_cache/
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database files
+mindfold.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Replit
+.replit
+.cache/
+poetry.lock
+.breakpoints
+replit.nix
+.pythonlibs/
+
+# SSL Certificates
+localhost.crt
+localhost.key
+*.pem
+# Word temp files
+~$*
+~WRL*.tmp
