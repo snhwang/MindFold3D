@@ -134,9 +134,9 @@ def _count_components(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[in
     return components
 
 def _calculate_branching_factor(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[int, int, int]) -> int:
-    """Approximates branching. Counts voxels with >2 neighbors (branch points) 
-       and voxels with 1 neighbor (endpoints), considers their ratio or sum.
-       A simpler heuristic: count voxels with 3 or more neighbors within the shape.
+    """Approximate branching: count voxels whose in-shape face-neighbor degree
+    is >= 3 (i.e. true branch points). Endpoints (degree 1) are not considered
+    and no ratio or sum is computed.
     """
     if len(voxels_set) < 3:
         return 0 # Not enough voxels to really branch
@@ -754,10 +754,11 @@ def nudge_voxels_until_unique(voxels: List[List[int]],
 
     Used as a last-ditch distractor fallback when the upstream generator
     keeps producing rotational copies of an already-accepted shape.
-    Maintains connectivity opportunistically (adds only place voxels
-    adjacent to existing ones; removes may disconnect, which is
-    acceptable for a distractor). Returns the mutated list, or None
-    if no unique form is found within max_iterations.
+    Maintains connectivity: adds only place voxels adjacent to existing ones,
+    and removals are rejected if they would increase the component count (an
+    explicit check against target_n_components prevents splits/orphans).
+    Returns the mutated list, or None if no unique form is found within
+    max_iterations.
     """
     import random as _random
     vset: Set[Tuple[int, int, int]] = {tuple(v) for v in voxels}

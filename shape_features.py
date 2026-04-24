@@ -43,7 +43,7 @@ class ShapeFeatureSet(BaseModel):
     center_of_mass_offset: Optional[Tuple[float, float, float]] = Field((0.0, 0.0, 0.0), description="Displacement from grid center")
     dominant_axis: Optional[Literal['x', 'y', 'z', 'balanced']] = Field('balanced', description="Longest spatial direction")
     largest_component_ratio: Optional[float] = Field(1.0, ge=0.0, le=1.0, description="Size of largest component / total voxels")
-    is_chiral: Optional[bool] = Field(None, description="Whether shape differs from its mirror reflection on all axes")
+    is_chiral: Optional[bool] = Field(None, description="Whether shape differs from its mirror reflection on at least one axis (True if any axis-aligned mirror image does not match the original)")
 
     # --- Task-level descriptors (set during question assembly, not shape geometry) ---
     distractor_similarity: Optional[Literal['mirror', 'rotation', 'extra_voxel', 'missing_voxel', 'part_permuted', 'none']] = Field('none', description="How distractors differ from target")
