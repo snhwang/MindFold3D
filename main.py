@@ -450,13 +450,14 @@ def get_multiple_choice(
         print("\n--- DEBUG: Just before returning from /get-multiple-choice ---")
         print(f"Number of choices: {len(all_choices_responses)}")
         
-        # Ensure we're returning exactly 4 choices total (3 distractors + 1 target)
+        # Aim for exactly 4 choices total (3 distractors + 1 target): truncate if
+        # there are too many, log a warning if there are too few (no padding).
         if len(all_choices_responses) > 4:
             print(f"WARNING: Too many choices generated ({len(all_choices_responses)}), limiting to 4")
             all_choices_responses = all_choices_responses[:4]
         elif len(all_choices_responses) < 4:
             print(f"WARNING: Too few choices generated ({len(all_choices_responses)}), should have 4")
-            # If we have too few, we could add simple defaults here, but it's unlikely
+            # We don't pad here; callers must tolerate < 4 choices in the rare event this occurs.
         
         # Perspective mode: select viewpoints for target and choices
         perspective_data = None
@@ -1284,7 +1285,10 @@ def coaching_advice(
     scorecard = _compute_scorecard(current_user.id)
     performance_summary = serialize_performance_for_llm(scorecard)
 
-    # Use the detailed scorecard prompt if no user question (likely scorecard page)
+    # Build the on-demand advice prompt in both cases. When a user_question is
+    # provided it is appended to the prompt; otherwise a general-advice variant
+    # is produced. (build_scorecard_analysis_prompt is imported but reserved for
+    # the dedicated /coaching/scorecard-analysis endpoint below.)
     if request.user_question:
         prompt = build_on_demand_advice_prompt(performance_summary, request.user_question)
         max_tok = 400
@@ -1459,7 +1463,9 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
                         if field not in db_feature_stats:
                             db_feature_stats[field] = {}
                         
-                        # Create dummy entry with 50% success rate
+                        # Create dummy entry using half the user's correct-answer
+                        # count as a coarse placeholder (not a true 50% success rate).
+                        # Used only when no real per-feature stats exist yet.
                         value_key = str(value)
                         if value_key not in db_feature_stats[field]:
                             correct_count = max(1, int(user_stats.correct_answers / 2))

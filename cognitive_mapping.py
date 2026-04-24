@@ -268,8 +268,8 @@ class SkeletonSpec:
     voxel_count: int = 10
     grid_size: Tuple[int, int, int] = (7, 7, 7)
     # From structural_complexity
-    num_branches: int = 3           # tree: 2/3/5
-    num_loops: int = 1              # bridge: 1/2
+    num_branches: int = 3           # tree: 2 (low) / 3 (medium) / 5 (high) / 7 (expert)
+    num_loops: int = 1              # bridge: 0 (low) / 1 (medium) / 2 (high) / 4 (expert)
     num_components: int = 1         # disconnected voxel clusters: 1/1/2/3
     # From spatial_form
     direction_spread: str = "moderate"  # "planar", "moderate", "elongated_3d"
@@ -304,7 +304,8 @@ def get_difficulty_spec(
         shape_difficulties: Difficulty for each Layer 1 dimension.
             Keys: "spatial_form", "structural_complexity", "spatial_scale"
         task_difficulties: Difficulty for each Layer 2 dimension.
-            Keys: "mental_rotation", "mirror_discrimination", "working_memory"
+            Keys: "mental_rotation", "mirror_discrimination", "working_memory",
+                  "configural_binding", "perspective_taking"
         target_voxel_count: Desired number of voxels (randomized per-question).
 
     Returns:

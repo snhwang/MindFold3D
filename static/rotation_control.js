@@ -189,9 +189,13 @@ class RotationController {
     
     // Check if we should change rotation axis
     if (now - this.lastDirectionChangeTime > this.options.directionChangeInterval) {
-      // Check if we've completed a full rotation (approximately 2π radians)
-      const totalRotation = Math.abs(this.accumulatedRotation.x) + 
-                            Math.abs(this.accumulatedRotation.y) + 
+      // Check whether cumulative per-axis rotation magnitude reaches 2π.
+      // This is the sum of absolute Euler components, so it is an upper bound:
+      // for a rotation purely around one axis it matches a full revolution, but
+      // for rotations spread across multiple axes (e.g. a diagonal axis) it
+      // crosses 2π sooner than a true single full revolution of the shape.
+      const totalRotation = Math.abs(this.accumulatedRotation.x) +
+                            Math.abs(this.accumulatedRotation.y) +
                             Math.abs(this.accumulatedRotation.z);
                             
       if (totalRotation >= Math.PI * 2) {

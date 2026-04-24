@@ -393,13 +393,13 @@ class AsymmetricSkeleton(SkeletonRule):
     discrimination and mental rotation tasks.
 
     Direct from cognitive params:
-      spec.direction_spread -> leg length ratios
-        isotropic: roughly equal legs
-        rod: one dominant leg
-        pancake: two long, one short
+      spec.direction_spread -> leg length ratios (see _compute_leg_lengths):
+        "elongated_3d": one dominant leg (~55% of budget) + two shorter legs
+        "planar":       two long legs in-plane, one very short out-of-plane
+        other (e.g. "moderate"): roughly equal legs across all three axes
       spec.planarity -> axis choices
         high: 2 legs in same plane
-        low: spread across all 3 axes
+        low/medium: spread across all 3 axes
       spec.packing -> skeleton vs fill ratio
     """
 
@@ -550,7 +550,9 @@ class LoopSkeleton(SkeletonRule):
     Forces topological cycles (holes/loops) for topological reasoning tasks.
 
     Direct from cognitive params:
-      spec.num_loops -> number of rectangular loops (1-5)
+      spec.num_loops -> number of rectangular loops. Values produced by
+        get_skeleton_spec are 0 (low), 1 (medium), 2 (high), 4 (expert);
+        the inner helpers cap at 5.
       spec.packing -> loop dimensions: dense=minimal 3x2, sparse=wider 3x3
       spec.direction_spread -> loop orientation and extension direction
     """
@@ -922,8 +924,10 @@ def _optimize_geometry(
     if not targets:
         return voxels
 
-    # Record topology baseline to preserve.  Tolerance scales with baseline:
-    # tight (±1) for low-complexity shapes, looser (±2) for complex ones.
+    # Record topology baseline to preserve.  Tolerances are set below:
+    # cycle_tol is always 0 (exact cycle count preserved); branch_tol is 999
+    # (effectively unbounded) for low spatial_form to allow compact reshaping,
+    # and 0 (exact branch count preserved) otherwise.
     topo_cycles = _calculate_cycle_count(voxels, grid_size)
     topo_branching = _calculate_branching_factor(voxels, grid_size)
     topo_components = _count_components(voxels, grid_size)

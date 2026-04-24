@@ -1534,7 +1534,8 @@
           document.getElementById('sound-level-complete').play().catch(e => console.log('Sound play error:', e));
         }
 
-        // Calculate points: base points + time bonus + streak bonus
+        // Calculate points: base points + flat correctness bonus (10) + streak bonus.
+        // The hardcoded (1 * 10) is a flat correctness bonus, not a time-based bonus.
         const streakBonus = Math.min(currentStreak * 20, 200); // Cap streak bonus at 200
         let pointsEarned = basePoints + (1 * 10) + streakBonus;
 
