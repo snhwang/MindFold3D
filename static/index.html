@@ -102,26 +102,39 @@
       background: #f0f0f0;
     }
 
+    /* Outer column that wraps the mode bar + game-area + (sticky) controls.
+       overflow: hidden is the linchpin of the fit-to-viewport behaviour:
+       neither the page nor this container ever scrolls. The interior
+       game-area is a grid that distributes the available space. */
     #container {
-      flex: 1;
+      flex: 1 1 auto;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       width: 100%;
       box-sizing: border-box;
-      overflow: auto;
+      overflow: hidden;
       padding: 0.5rem 1rem;
-      height: calc(100vh - 80px);
-      min-height: 600px;
-      /* Slightly reduced to decrease vertical spacing */
     }
 
+    /* Game area grid. Rows:
+         1. heading ("Match the Target Shape") - auto
+         2. target shape - 1fr (1 share)
+         3. choices grid - 2fr (2 shares -> 2 rows of 1 share, matching
+            target height for visual balance)
+         4. controls strip - auto
+       Using 1fr/2fr instead of auto/1fr means target and each choice
+       row get an equal height share automatically, regardless of
+       viewport size. The target NEVER crowds the choices, and on tall
+       viewports they all scale up together. */
     #game-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 580px;
-      justify-content: flex-start;
-      /* Align content at the top */
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) minmax(0, 2fr) auto;
+      grid-template-columns: 1fr;
+      gap: clamp(4px, 0.6vh, 10px);
+      min-height: 0;
+      overflow: hidden;
     }
 
     #game-area h2 {
@@ -130,79 +143,139 @@
     }
 
     /* ---------- Layout: viewers, target, choices (responsive rewrite) ---------- */
-    /* Container for the target shape at the top of the game area.
-       flex-shrink:0 is critical: #game-area is column flex with a min-height
-       and was squashing this container, letting the target's aspect-ratio
-       square overflow the container's bottom into the choices grid below
-       (visible bug at 375-640px). margin-bottom adds breathing room. */
+    /* Container for the target shape. Sized by the grid as a fixed-fraction
+       row (see #game-area below). container-type: size makes it a query
+       container so #target can size itself to whichever of cqw/cqh is
+       smaller, producing a square that fits without overflow. */
     .target-container {
       width: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
-      flex-shrink: 0;
-      margin-bottom: clamp(8px, 2vw, 16px);
-      height: auto;
       min-height: 0;
-      padding: 2px 0;
+      min-width: 0;
+      padding: 0;
+      container-type: size;
+      container-name: target-cell;
+      overflow: hidden;
     }
 
-    /* Every shape-viewer (target and choices): fluid square, capped by wrapper. */
+    /* Generic viewer base. Concrete sizing is set on #target and on
+       choice viewers via container queries below. */
     .viewer {
       border: 1px solid #ccc;
       background: #eee;
       touch-action: none;
       overflow: hidden;
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      max-width: 220px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-sizing: border-box;
     }
 
-    /* Target: capped on desktop, scales down smoothly on mobile. */
+    /* Target: square that fits its container. .target-container is given
+       a sized cell by the surrounding grid; the target uses container
+       queries to pick whichever of width/height is smaller, capped at
+       220px. This way the target shrinks proportionally on short
+       viewports without crowding the choices grid below. */
     #target {
       border: 2px solid #007acc;
       box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
-      width: clamp(140px, 40vw, 220px);
-      aspect-ratio: 1 / 1;
-      max-width: 220px;
+      width: min(100cqw, 100cqh, 220px);
+      height: min(100cqw, 100cqh, 220px);
+      max-width: 100%;
+      max-height: 100%;
       margin: 0 auto;
     }
 
-    /* Column wrapper around #choices (from the HTML). */
+    /* Wrapper around the choices grid. Critical: height:100% + min-height:0
+       lets the wrapper consume the 1fr row of #game-area, and pass that
+       finite height down to #choices so each cell can compute its size. */
     .choices-container {
       display: flex;
       flex-direction: column;
       margin: 0;
       padding: 0;
       width: 100%;
+      height: 100%;
+      min-height: 0;
       position: relative;
+      align-items: center;
+      justify-content: center;
+    }
+    .choices-wrapper {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
-    /* Multiple-choice grid: 4 across on desktop/tablet, 2x2 on phones.
-       minmax(0, 1fr) lets children shrink; without it their intrinsic
-       (canvas) width would push siblings into overlap. */
+    /* Multiple-choice grid: 4-up on desktop/tablet, 2x2 on phones.
+       min-height:0 lets the grid rows shrink. height:100% binds the grid
+       to the parent's flexed height so each cell can size against it. */
     #choices {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: clamp(4px, 1vw, 10px);
       width: 100%;
       max-width: 920px;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
       margin: 0 auto;
       padding: 0;
+      align-items: center;
+      justify-items: center;
+    }
+    /* 2x2 grid -> 2 rows by default when 2 columns; explicit row template
+       so each row gets equal share of the available height. */
+    #choices {
+      grid-auto-rows: minmax(0, 1fr);
     }
 
-    /* Each choice cell: centered column; min-width:0 is essential so the
-       inner canvas-based viewer can shrink below its intrinsic width. */
+    /* Each choice cell is a CSS containment context so its inner viewer
+       can be sized as a square that fits whichever dimension is smaller
+       (cqw vs cqh). This is what makes the grid actually fit-to-viewport
+       at every aspect ratio without per-breakpoint hand-tuning.
+       justify-content: flex-start keeps the viewer at the top of the cell
+       with the Choose button immediately below it (no wasted vertical
+       space when the cell is wider than tall). */
     .choice-wrapper {
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: flex-start;
       min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
       margin: 0;
       padding: 1px;
       box-shadow: none;
       position: relative;
+      box-sizing: border-box;
+      container-type: size;
+      container-name: choice;
+      overflow: hidden;
+    }
+
+    /* Choice viewer: square that fits within the cell, taking the smaller
+       of the cell's width or (height - label allowance). The label is
+       roughly 1 line at ~0.9rem with ~0.3rem padding above and below =
+       ~2.0em. Reserving 2.0em keeps the square from clipping the button. */
+    .choice-wrapper .viewer {
+      width: min(100cqw, calc(100cqh - 2em));
+      height: min(100cqw, calc(100cqh - 2em));
+      max-width: 100%;
+      max-height: calc(100% - 2em);
+      flex-shrink: 0;
+    }
+
+    /* Choose button hugs the viewer above; no extra top margin so the
+       viewer can grow as large as the cell permits. */
+    .choice-wrapper button.choice {
+      margin-top: 2px;
+      flex-shrink: 0;
     }
 
     .choice-wrapper .viewer.highlight-correct {
@@ -219,7 +292,9 @@
 
     /* Reflow 4-across to 2x2 on narrow screens (phones and small tablets).
        Bumped from 560 -> 640 because at 600-640px the 4-across cells become
-       cramped (~150px) and crowd the target. */
+       cramped (~150px) and crowd the target. With 2 columns the grid will
+       have 2 rows and grid-auto-rows: minmax(0, 1fr) gives each row half
+       the available height. */
     @media (max-width: 640px) {
       #choices {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -228,18 +303,22 @@
     }
     /* ---------- End responsive rewrite ---------- */
 
+    /* Controls strip: lives in the last grid row of #game-area, so it
+       always sits at the bottom of the visible area without needing
+       position:sticky (which doesn't compose well with the grid here).
+       overflow-y:auto so a verbose state (long feedback message,
+       expanded coaching panel) scrolls *inside* the strip rather than
+       pushing the choices grid off-screen. */
     .controls-container {
-      padding: 0.5rem 0;
-      min-height: 50px;
-      margin-top: 0.5rem;
-      margin-bottom: 0.5rem;
-      position: sticky;
-      bottom: 0;
+      min-height: 0;
+      padding: 6px 8px;
+      margin: 0;
       background: #f0f0f0;
       z-index: 100;
-      padding: 8px;
       border-top: 1px solid #ddd;
       box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      max-height: 35svh;
+      overflow-y: auto;
     }
 
     button.choice {
@@ -458,15 +537,10 @@
        share vertical space, and the header / mode nav collapse.
        ────────────────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      /* Let the game area grow with content and the #container scroll
-         if anything still overflows (rare). The old min-heights used to
-         force 600 px, which pushed choices off-screen on phones. */
-      #container {
-        min-height: 0;
-        padding: 0.25rem 0.5rem;
-        height: calc(100vh - 60px);
-      }
-      #game-area { min-height: 0; }
+      /* Container/game-area sizing now comes from the flex/grid in the
+         non-media-query rules above. Just compact the chrome and let
+         the choices grid fill the remaining space automatically. */
+      #container { padding: 0.25rem 0.5rem; }
 
       /* Compact header so target + 2x2 grid fit above the fold. */
       header {
@@ -475,7 +549,6 @@
       }
       header img { max-height: 42px; }
       header p { display: none; } /* tagline hidden on phones */
-      #container { height: calc(100vh - 56px); }
 
       /* Compact mode-navigation bar. */
       .mode-navigation {
@@ -538,11 +611,8 @@
       header img { max-height: 36px !important; }
       header p { display: none; }
       #container {
-        height: calc(100vh - 44px) !important;
-        min-height: 0 !important;
         padding: 0.25rem 0.5rem !important;
       }
-      #game-area { min-height: 0 !important; }
       .mode-navigation {
         padding: 3px !important;
         margin-bottom: 0.2rem !important;
@@ -554,32 +624,65 @@
       }
       #game-area h2 { display: none; } /* 'Match the Target Shape' */
 
-      /* Two-row layout: target on the left, 2x2 grid on the right so
-         nothing has to scroll. Cap the target so the choices grid
-         actually has room (was previously letting target consume 224px
-         and squeezing each choice down to ~70-90px wide). */
+      /* Side-by-side layout: target on the left, 2x2 grid on the right.
+         Override the column grid with a row grid where the target column
+         is fixed-width and the choices column takes the rest. */
       #game-area {
-        flex-direction: row !important;
-        align-items: flex-start;
-        gap: clamp(8px, 2vw, 16px);
+        grid-template-columns: clamp(120px, 28vw, 180px) 1fr !important;
+        grid-template-rows: 1fr auto !important;
+        gap: clamp(8px, 2vw, 16px) !important;
+        align-items: stretch;
       }
+      /* Target spans the first column, stretched so its container has
+         a real height (align-self: center collapses to content height
+         when the child is sized in % of the container -> chicken-and-egg
+         that produced a 22px-tall target). */
+      #game-area h2 { grid-column: 1 / -1; display: none; }
       .target-container {
-        flex: 0 0 auto;
-        width: clamp(120px, 28vw, 180px) !important;
-        margin-bottom: 0 !important;
+        grid-column: 1 / 2;
+        grid-row: 1 / 2;
+        align-self: stretch;
+        justify-self: stretch;
+        margin: 0 !important;
+        /* Container-type: size from the base rule still applies, so
+           cqw/cqh resolve against this stretched cell. */
       }
       #target {
-        width: 100% !important;
-        max-width: 180px !important;
+        /* Use container query units against the stretched target-container
+           so the shape is a real square that fits. */
+        width: min(100cqw, 100cqh, 180px) !important;
+        height: min(100cqw, 100cqh, 180px) !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
       }
       .choices-container {
-        flex: 1 1 auto;
-        min-width: 0; /* allow the grid to shrink within the row */
+        grid-column: 2 / 3;
+        grid-row: 1 / 2;
+        min-width: 0;
       }
-      /* Force 2x2 in the short-viewport row layout regardless of width. */
+      /* Controls span both columns at the bottom. */
+      .controls-container {
+        grid-column: 1 / -1;
+        grid-row: 2 / 3;
+      }
+      /* In landscape, prefer a single row of 4 choices: the choices
+         column is wide (vw - target column) and short (~30svh), so
+         packing 4-across gives larger viewers than a 2x2 grid. Fall
+         back to 2x2 only on very narrow landscape (e.g., split-view). */
       #choices {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-auto-rows: 1fr !important;
         max-width: 100% !important;
+      }
+      @media (max-height: 500px) and (max-width: 560px) {
+        #choices {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+      }
+      /* Reserve less vertical for the choose button label in landscape. */
+      .choice-wrapper .viewer {
+        width: min(100cqw, calc(100cqh - 1.6em)) !important;
+        height: min(100cqw, calc(100cqh - 1.6em)) !important;
       }
       button.choice {
         width: 100% !important;
@@ -591,9 +694,15 @@
         padding: 2px 4px !important;
         margin: 0 !important;
         min-height: 0 !important;
+        max-height: 45svh !important;
       }
       #feedback { font-size: 0.8rem !important; margin: 0 !important; }
       #score { font-size: 0.7rem !important; margin: 0 !important; }
+      /* Tighten controls in landscape so they don't crowd the playable area. */
+      #score, #feedback { font-size: 0.75rem !important; line-height: 1.2 !important; }
+      .controls-container .options-row,
+      .controls-container > div { gap: 4px !important; margin: 1px 0 !important; }
+      #stop-test-btn { padding: 4px 10px !important; font-size: 0.85rem !important; margin: 2px auto !important; }
     }
 
     /* Very narrow phones (<= 360 px): shorten the Choose button text so
