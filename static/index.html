@@ -117,25 +117,30 @@
       padding: 0.5rem 1rem;
     }
 
-    /* Game area grid. Rows:
-         1. heading ("Match the Target Shape") - auto
-         2. target shape - 1fr (1 share)
-         3. choices grid - 2fr (2 shares -> 2 rows of 1 share, matching
-            target height for visual balance)
-         4. controls strip - auto
-       Using 1fr/2fr instead of auto/1fr means target and each choice
-       row get an equal height share automatically, regardless of
-       viewport size. The target NEVER crowds the choices, and on tall
-       viewports they all scale up together. */
+    /* Game area grid. Rows are explicitly named so children can be
+       placed by name regardless of source order. This is critical:
+       #game-area contains an auto-sized reviewer-context banner as
+       its first child, plus h2 / target / choices / controls. Without
+       explicit grid-row assignments, the banner pushed every other
+       child down by one row and the target ended up in the choices
+       row (and got covered by the choices grid). */
     #game-area {
       flex: 1 1 auto;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) minmax(0, 2fr) auto;
+      grid-template-rows: [banner] auto [heading] auto [target] minmax(0, 1fr) [choices] minmax(0, 2fr) [controls] auto [end];
       grid-template-columns: 1fr;
       gap: clamp(4px, 0.6vh, 10px);
       min-height: 0;
       overflow: hidden;
     }
+
+    /* Pin each game-area child to its named row so the grid layout
+       is deterministic regardless of source order. */
+    #game-area > #reviewer-context { grid-row: banner / heading; }
+    #game-area > h2 { grid-row: heading / target; }
+    #game-area > .target-container { grid-row: target / choices; }
+    #game-area > .choices-container { grid-row: choices / controls; }
+    #game-area > .controls-container { grid-row: controls / end; }
 
     #game-area h2 {
       margin: 0 0 0.1rem 0;
@@ -593,8 +598,11 @@
       #feedback { font-size: 0.95rem !important; margin: 2px 0 !important; }
       #score { font-size: 0.8rem !important; margin: 0 !important; }
 
-      /* Reviewer banner collapses on phones so the game is the focus. */
-      #reviewer-context { font-size: 0.78rem !important; padding: 6px 10px !important; }
+      /* Reviewer banner is hidden on phones - the play area is too
+         tight to share space with a 5-line explanation, and the banner
+         was previously consuming ~170px of viewport on 640px-tall
+         devices, leaving no room for the target shape. */
+      #game-area > #reviewer-context { display: none !important; grid-row: auto !important; }
     }
 
     /* Landscape phones / short viewports: collapse header + mode nav
@@ -626,21 +634,25 @@
 
       /* Side-by-side layout: target on the left, 2x2 grid on the right.
          Override the column grid with a row grid where the target column
-         is fixed-width and the choices column takes the rest. */
+         is fixed-width and the choices column takes the rest. The
+         portrait named-row template is replaced with a 2-row template,
+         so the named-line grid-row assignments below also get overridden. */
       #game-area {
         grid-template-columns: clamp(120px, 28vw, 180px) 1fr !important;
         grid-template-rows: 1fr auto !important;
         gap: clamp(8px, 2vw, 16px) !important;
         align-items: stretch;
       }
+      /* Banner is hidden in landscape (would crowd the play area). */
+      #game-area > #reviewer-context { display: none !important; grid-row: auto !important; }
       /* Target spans the first column, stretched so its container has
          a real height (align-self: center collapses to content height
          when the child is sized in % of the container -> chicken-and-egg
          that produced a 22px-tall target). */
-      #game-area h2 { grid-column: 1 / -1; display: none; }
-      .target-container {
+      #game-area > h2 { grid-column: 1 / -1; display: none; grid-row: auto !important; }
+      #game-area > .target-container {
         grid-column: 1 / 2;
-        grid-row: 1 / 2;
+        grid-row: 1 / 2 !important;
         align-self: stretch;
         justify-self: stretch;
         margin: 0 !important;
@@ -655,15 +667,15 @@
         max-width: 100% !important;
         max-height: 100% !important;
       }
-      .choices-container {
+      #game-area > .choices-container {
         grid-column: 2 / 3;
-        grid-row: 1 / 2;
+        grid-row: 1 / 2 !important;
         min-width: 0;
       }
       /* Controls span both columns at the bottom. */
-      .controls-container {
+      #game-area > .controls-container {
         grid-column: 1 / -1;
-        grid-row: 2 / 3;
+        grid-row: 2 / 3 !important;
       }
       /* In landscape, prefer a single row of 4 choices: the choices
          column is wide (vw - target column) and short (~30svh), so
