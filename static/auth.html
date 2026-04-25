@@ -89,7 +89,9 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
   <script>
     if (localStorage.getItem('token')) {
-      window.location.href = '/';
+      // Send authenticated users to the mode-picker landing page
+      // instead of dropping them straight into multiple choice.
+      window.location.href = '/home';
     }
 
     document.getElementById('start-btn').addEventListener('click', function () {
@@ -105,7 +107,7 @@
         })
         .then(data => {
           localStorage.setItem('token', data.access_token);
-          window.location.href = '/';
+          window.location.href = '/home';
         })
         .catch(() => {
           errorEl.textContent = 'Could not start a session. Please try again.';
