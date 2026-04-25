@@ -129,50 +129,47 @@
       /* Reduced bottom margin */
     }
 
-    /* Container for the viewer elements */
+    /* ---------- Layout: viewers, target, choices (responsive rewrite) ---------- */
+    /* Container for the target shape at the top of the game area.
+       flex-shrink:0 is critical: #game-area is column flex with a min-height
+       and was squashing this container, letting the target's aspect-ratio
+       square overflow the container's bottom into the choices grid below
+       (visible bug at 375-640px). margin-bottom adds breathing room. */
     .target-container {
       width: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
-      margin-bottom: 0;
-      /* Reduced from 0.25rem to 0 */
+      flex-shrink: 0;
+      margin-bottom: clamp(8px, 2vw, 16px);
       height: auto;
-      min-height: 100px;
+      min-height: 0;
       padding: 2px 0;
-      /* Reduced from 5px to 2px */
     }
 
-    /* General viewer styles */
+    /* Every shape-viewer (target and choices): fluid square, capped by wrapper. */
     .viewer {
       border: 1px solid #ccc;
       background: #eee;
       touch-action: none;
       overflow: hidden;
-      width: 31vw;
-      height: 31vw;
+      width: 100%;
+      aspect-ratio: 1 / 1;
       max-width: 220px;
-      max-height: 220px;
-      min-width: 100px;
-      min-height: 100px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
-    /* Target view styling */
+    /* Target: capped on desktop, scales down smoothly on mobile. */
     #target {
       border: 2px solid #007acc;
-      /* Blue border */
       box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
-      /* Blue glow */
-      width: 31vw;
-      height: 31vw;
+      width: clamp(140px, 40vw, 220px);
+      aspect-ratio: 1 / 1;
       max-width: 220px;
-      max-height: 220px;
-      min-width: 100px;
-      min-height: 100px;
       margin: 0 auto;
     }
 
+    /* Column wrapper around #choices (from the HTML). */
     .choices-container {
       display: flex;
       flex-direction: column;
@@ -182,44 +179,54 @@
       position: relative;
     }
 
+    /* Multiple-choice grid: 4 across on desktop/tablet, 2x2 on phones.
+       minmax(0, 1fr) lets children shrink; without it their intrinsic
+       (canvas) width would push siblings into overlap. */
     #choices {
-      display: flex;
-      flex-direction: row;
-      justify-content: center;
-      align-items: center;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: clamp(4px, 1vw, 10px);
       width: 100%;
+      max-width: 920px;
       margin: 0 auto;
       padding: 0;
-      gap: 0;
     }
 
+    /* Each choice cell: centered column; min-width:0 is essential so the
+       inner canvas-based viewer can shrink below its intrinsic width. */
     .choice-wrapper {
-      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
+      min-width: 0;
       margin: 0;
       padding: 1px;
       box-shadow: none;
       position: relative;
     }
 
-    /* Fix for highlight effect when selected */
     .choice-wrapper .viewer.highlight-correct {
       box-shadow: 0 0 15px 8px #5f5 !important;
       z-index: 10;
-      /* Ensure highlight appears above other elements */
       position: relative;
-      /* Added position relative */
     }
 
     .choice-wrapper .viewer.highlight-wrong {
       box-shadow: 0 0 15px 8px #f55 !important;
       z-index: 10;
-      /* Ensure highlight appears above other elements */
       position: relative;
-      /* Added position relative */
     }
+
+    /* Reflow 4-across to 2x2 on narrow screens (phones and small tablets).
+       Bumped from 560 -> 640 because at 600-640px the 4-across cells become
+       cramped (~150px) and crowd the target. */
+    @media (max-width: 640px) {
+      #choices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 480px;
+      }
+    }
+    /* ---------- End responsive rewrite ---------- */
 
     .controls-container {
       padding: 0.5rem 0;
@@ -338,64 +345,12 @@
         font-size: 1.1rem;
         margin: 0.4rem 0;
       }
-
-      .viewer {
-        height: 180px;
-        width: 180px;
-      }
-
-      .choice-wrapper {
-        width: 180px;
-      }
-
-      #choices {
-        gap: 6px;
-        /* Reduced gap for smaller screens */
-      }
-    }
-
-    @media (max-width: 650px) {
-      .viewer {
-        height: 160px;
-        width: 160px;
-      }
-
-      .choice-wrapper {
-        width: 160px;
-      }
-
-      .target-container {
-        height: 165px;
-      }
-
-      #choices {
-        gap: 5px;
-        /* Reduced gap for smaller screens */
-      }
     }
 
     @media (max-width: 480px) {
       header img {
         max-width: 140px;
         max-height: 60px;
-      }
-
-      .viewer,
-      #target {
-        width: 30vw;
-        height: 30vw;
-        min-width: 90px;
-        min-height: 90px;
-      }
-
-      .choice-wrapper {
-        width: 140px;
-        padding: 3px;
-        /* Reduced padding on small screens */
-      }
-
-      .target-container {
-        height: 145px;
       }
 
       button.choice {
@@ -410,33 +365,10 @@
         padding: 0.5rem 0.8rem;
         font-size: 0.85rem;
       }
-
-      #choices {
-        gap: 4px;
-        /* Reduced gap for very small screens */
-      }
     }
 
     /* For very small screens */
     @media (max-width: 375px) {
-
-      .viewer,
-      #target {
-        width: 30vw;
-        height: 30vw;
-        min-width: 80px;
-        min-height: 80px;
-      }
-
-      .choice-wrapper {
-        width: 108px;
-        padding: 1px;
-      }
-
-      #choices {
-        gap: 2px;
-        justify-content: center;
-      }
 
       /* Make "Choose" buttons more compact */
       button.choice {
@@ -447,22 +379,9 @@
       }
 
       /* Add side margins to ensure content is centered */
-      .choices-wrapper {
-        max-width: 360px;
-        margin: 0 auto;
-      }
     }
 
     /* Additional fix for portrait orientation on mobile */
-    @media (max-width: 480px) and (orientation: portrait) {
-
-      .target-container,
-      .choices-container {
-        height: 28vh;
-        /* Even smaller in portrait to fit everything */
-      }
-    }
-
     /* AR-specific styles */
     .ar-ui-element {
       pointer-events: auto;
@@ -473,37 +392,10 @@
     @media (max-width: 480px) {
 
       /* Ensure choices container is centered with constrained width */
-      .choices-container {
-        max-width: 98vw;
-        /* Prevent overflow on small screens */
-        margin: 0 auto;
-        display: flex;
-        justify-content: center;
-      }
 
       /* Make the choice boxes scale better */
-      #choices {
-        justify-content: center;
-        /* Changed from space-evenly to center */
-        width: fit-content;
-        /* Allow container to fit content */
-        margin: 0 auto;
-        padding: 0 2px;
-        /* Small padding to prevent edge cutting */
-        gap: 4px;
-        /* Reduced gap for mobile */
-      }
 
       /* Make viewer containers slightly smaller to fit better */
-      .viewer {
-        width: 128px;
-        height: 128px;
-      }
-
-      .choice-wrapper {
-        width: 130px;
-        /* Slightly wider than viewer */
-      }
 
       /* Adjust highlight to be less expansive on small screens */
       .choice-wrapper .viewer.highlight-correct {
@@ -519,20 +411,6 @@
     @media (max-width: 375px) {
 
       /* Further reduce size on very small phones */
-      .viewer {
-        width: 105px;
-        height: 105px;
-      }
-
-      .choice-wrapper {
-        width: 108px;
-        padding: 1px;
-      }
-
-      #choices {
-        gap: 2px;
-        justify-content: center;
-      }
 
       /* Make "Choose" buttons more compact */
       button.choice {
@@ -542,47 +420,14 @@
       }
 
       /* Add side margins to ensure content is centered */
-      .choices-wrapper {
-        max-width: 360px;
-        margin: 0 auto;
-      }
     }
 
     /* Ensure overall container is properly centered on all screens */
-    .choices-wrapper {
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      margin: 0 auto;
-      max-width: 1024px;
-      /* Prevent extreme stretching on wide screens */
-    }
 
     /* Failsafe mobile layout - super small screens */
     @media (max-width: 320px) {
 
       /* Make everything fit on the smallest screens */
-      .viewer,
-      #target {
-        width: 30vw;
-        height: 30vw;
-        min-width: 75px;
-        min-height: 75px;
-        border-width: 1px;
-        margin: 0;
-      }
-
-      .choice-wrapper {
-        padding: 0;
-        margin: 0;
-      }
-
-      #choices {
-        width: 100%;
-        justify-content: space-between;
-        padding: 0;
-        gap: 0;
-      }
 
       button.choice {
         width: calc(30vw - 2px);
@@ -603,15 +448,160 @@
       }
 
       /* Reset to absolute minimum styles */
-      .choice-wrapper,
-      .viewer,
-      #choices,
-      #target {
-        box-sizing: border-box;
-      }
     }
 
-    /* Add proper mobile viewport meta tag */
+    /* ──────────────────────────────────────────────────────────────
+       Mobile / small-screen fit (2x2 MC grid)
+       This block comes last intentionally so it supersedes the older
+       4-wide mobile rules above. Phones get a 2-by-2 choice grid
+       where each shape stays readable, the target viewer shrinks to
+       share vertical space, and the header / mode nav collapse.
+       ────────────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      /* Let the game area grow with content and the #container scroll
+         if anything still overflows (rare). The old min-heights used to
+         force 600 px, which pushed choices off-screen on phones. */
+      #container {
+        min-height: 0;
+        padding: 0.25rem 0.5rem;
+        height: calc(100vh - 60px);
+      }
+      #game-area { min-height: 0; }
+
+      /* Compact header so target + 2x2 grid fit above the fold. */
+      header {
+        height: 56px;
+        min-height: 56px;
+      }
+      header img { max-height: 42px; }
+      header p { display: none; } /* tagline hidden on phones */
+      #container { height: calc(100vh - 56px); }
+
+      /* Compact mode-navigation bar. */
+      .mode-navigation {
+        padding: 4px !important;
+        margin-bottom: 0.25rem !important;
+      }
+      .mode-navigation > div { display: none; } /* 'Game Mode:' label */
+      .mode-navigation button {
+        padding: 6px 10px !important;
+        font-size: 0.95rem !important;
+      }
+
+      /* Headline tighter. */
+      #game-area h2 { font-size: 0.95rem !important; margin: 0.1rem 0 !important; }
+
+      /* ── Target viewer: cap by width AND height. Target shrinks so the
+         2x2 choice grid can fit beneath it on short viewports. */
+
+      /* ── 2x2 choice grid. vh cap is the critical constraint: two rows
+         of (viewer + button) must fit in roughly 50–55 vh on phones. */
+      button.choice {
+        width: 100% !important;
+        padding: 0.35rem 0.25rem !important;
+        font-size: 0.85rem !important;
+        margin-top: 0.2rem !important;
+      }
+
+      /* Smaller highlight glow so it doesn't spill into neighbors. */
+      .choice-wrapper .viewer.highlight-correct {
+        box-shadow: 0 0 10px 4px #5f5 !important;
+      }
+      .choice-wrapper .viewer.highlight-wrong {
+        box-shadow: 0 0 10px 4px #f55 !important;
+      }
+
+      /* Tighten the sticky footer so it doesn't eat the grid. */
+      .controls-container {
+        padding: 4px 6px !important;
+        margin: 0 !important;
+        min-height: 0 !important;
+      }
+      #feedback { font-size: 0.95rem !important; margin: 2px 0 !important; }
+      #score { font-size: 0.8rem !important; margin: 0 !important; }
+
+      /* Reviewer banner collapses on phones so the game is the focus. */
+      #reviewer-context { font-size: 0.78rem !important; padding: 6px 10px !important; }
+    }
+
+    /* Landscape phones / short viewports: collapse header + mode nav
+       and keep the 2x2 grid so the choices stay visible above the fold.
+       Kicks in whenever the viewport is short (<= 500 px tall), regardless
+       of width, so landscape iPhones, split-view iPads, and browser
+       inspector-sized windows all get the compact treatment. */
+    @media (max-height: 500px) {
+      header {
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 0 !important;
+      }
+      header img { max-height: 36px !important; }
+      header p { display: none; }
+      #container {
+        height: calc(100vh - 44px) !important;
+        min-height: 0 !important;
+        padding: 0.25rem 0.5rem !important;
+      }
+      #game-area { min-height: 0 !important; }
+      .mode-navigation {
+        padding: 3px !important;
+        margin-bottom: 0.2rem !important;
+      }
+      .mode-navigation > div { display: none; } /* 'Game Mode:' label */
+      .mode-navigation button {
+        padding: 4px 8px !important;
+        font-size: 0.85rem !important;
+      }
+      #game-area h2 { display: none; } /* 'Match the Target Shape' */
+
+      /* Two-row layout: target on the left, 2x2 grid on the right so
+         nothing has to scroll. Cap the target so the choices grid
+         actually has room (was previously letting target consume 224px
+         and squeezing each choice down to ~70-90px wide). */
+      #game-area {
+        flex-direction: row !important;
+        align-items: flex-start;
+        gap: clamp(8px, 2vw, 16px);
+      }
+      .target-container {
+        flex: 0 0 auto;
+        width: clamp(120px, 28vw, 180px) !important;
+        margin-bottom: 0 !important;
+      }
+      #target {
+        width: 100% !important;
+        max-width: 180px !important;
+      }
+      .choices-container {
+        flex: 1 1 auto;
+        min-width: 0; /* allow the grid to shrink within the row */
+      }
+      /* Force 2x2 in the short-viewport row layout regardless of width. */
+      #choices {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        max-width: 100% !important;
+      }
+      button.choice {
+        width: 100% !important;
+        padding: 0.2rem !important;
+        font-size: 0.7rem !important;
+        margin-top: 0.1rem !important;
+      }
+      .controls-container {
+        padding: 2px 4px !important;
+        margin: 0 !important;
+        min-height: 0 !important;
+      }
+      #feedback { font-size: 0.8rem !important; margin: 0 !important; }
+      #score { font-size: 0.7rem !important; margin: 0 !important; }
+    }
+
+    /* Very narrow phones (<= 360 px): shorten the Choose button text so
+       it doesn't wrap inside the 2x2 grid. */
+    @media (max-width: 360px) {
+      button.choice { font-size: 0.75rem !important; padding: 0.3rem 0.2rem !important; }
+    }
+
   </style>
 </head>
 
@@ -620,10 +610,11 @@
     <div class="user-menu">
       <button id="user-button" class="user-button">User</button>
       <div id="dropdown-menu" class="dropdown-menu">
+        <button id="profile-btn" onclick="showProfile()">Profile</button>
         <button id="scorecard-btn" onclick="window.location.href='/static/scorecard.html'">Performance
           Scorecard</button>
         <button id="builder-btn" onclick="switchToBuilderMode()">Structure Builder</button>
-        <button id="logout-btn" onclick="window.handleStandaloneLogout()"><i class="fas fa-sign-out-alt"></i> New Game</button>
+        <button id="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
       </div>
     </div>
 
@@ -640,22 +631,48 @@
     <div class="mode-navigation"
       style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.5rem; background: #f5f5f5; padding: 6px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
       <div style="font-weight: bold; margin-right: 8px; font-size: 0.9rem;">Game Mode:</div>
+      <button id="home-btn" onclick="window.location.href='/home'"
+        style="background: #6b7280; color: white; font-weight: bold; padding: 8px 12px; margin-right: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Home (mode picker)" aria-label="Home"><i
+          class="fas fa-home"></i></button>
       <button id="recognition-mode-btn" onclick="switchToRecognitionMode()"
-        style="background: #007acc; color: white; font-weight: bold; padding: 8px 12px; margin-right: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"><i
+        style="background: #007acc; color: white; font-weight: bold; padding: 8px 12px; margin-right: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Multiple Choice mode" aria-label="Multiple Choice"><i
           class="fas fa-eye"></i></button>
       <button id="builder-mode-btn" onclick="switchToBuilderMode()"
-        style="background: #888; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"><i
+        style="background: #888; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Structure Builder mode" aria-label="Structure Builder"><i
           class="fas fa-cubes"></i></button>
       <button id="help-btn" onclick="showInstructions()"
-        style="background: #00cc66; color: white; margin-left: 10px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"><i
+        style="background: #00cc66; color: white; margin-left: 10px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Instructions" aria-label="Instructions"><i
           class="fas fa-question-circle"></i></button>
       <button id="coach-btn" onclick="requestCoaching()"
         style="background: #6c5ce7; color: white; margin-left: 4px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; opacity: 0.5;"
-        title="AI Coach (checking...)"><i class="fas fa-brain"></i></button>
+        title="AI Coach (checking...)" aria-label="AI Coach"><i class="fas fa-brain"></i></button>
     </div>
 
     <!-- Recognition Mode (Multiple Choice) -->
     <div id="game-area">
+      <!-- Reviewer context banner: shown on first visit so reviewers immediately
+           understand what MindFold3D is. Dismissal is persisted in localStorage. -->
+      <div id="reviewer-context"
+        style="display: none; max-width: 720px; margin: 0.25rem auto 0.5rem; padding: 10px 14px; background: #f4f7fb; border-left: 3px solid #007acc; border-radius: 0 6px 6px 0; font-size: 0.85rem; color: #2a3b4d; line-height: 1.45;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+          <div>
+            <strong style="font-size: 0.9rem;">About this demo.</strong>
+            MindFold3D is a spatial-reasoning task generator that builds 3D voxel
+            shapes from a controlled feature skeleton. Each trial shows a target
+            shape and several distractors; the platform logs accuracy and response
+            latency per feature dimension to produce a cognitive profile. Use the
+            Memory / Mirror / Parts / Perspective / Expert toggles to explore
+            different task variants.
+          </div>
+          <button id="reviewer-context-dismiss" aria-label="Dismiss"
+            style="background: none; border: none; color: #6b7a8a; font-size: 1rem; cursor: pointer; padding: 0 2px; line-height: 1;">&times;</button>
+        </div>
+      </div>
+
       <h2 style="margin: 0 0 0.1rem 0; text-align: center; font-size: 1.1rem;">Match the Target Shape</h2>
 
       <div class="target-container">
@@ -703,7 +720,7 @@
           <label style="font-weight: bold; margin-left: 4px;">
             <input type="checkbox" id="perspective-mode" /> Perspective
           </label>
-          <label style="font-weight: bold; margin-left: 4px; color: #c44;"
+          <label style="font-weight: bold; margin-left: 4px;"
             title="Expert mode: 15-25 voxels in 10×10×10 grid with high topological complexity">
             <input type="checkbox" id="expert-mode" /> Expert
           </label>
@@ -848,7 +865,8 @@
 
   <div style="position: fixed; top: 80px; right: 10px; z-index: 50; pointer-events: auto;">
     <button id="logout-standalone"
-      style="padding: 6px 10px; background: #ff5555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);"><i class="fas fa-sign-out-alt"></i> New Game</button>
+      style="padding: 6px 10px; background: #ff5555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);"><i
+        class="fas fa-sign-out-alt"></i></button>
   </div>
 
   <audio id="sound-correct" preload="auto">
@@ -879,14 +897,30 @@
       const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
       const expertMode = document.getElementById('expert-mode')?.checked || false;
       _nextQuestionPromise = fetch(
-        `/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&expert_mode=${expertMode}`,
+        `/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&generation_mode=skeleton&expert_mode=${expertMode}&difficulty_level=${difficultyLevel}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       ).then(r => r.ok ? r.json() : null).catch(() => null);
     }
 
-
     // Game difficulty settings
-    let difficultyLevel = 1;
+    // Persisted across reloads so reviewers/users don't drop back to L1 on a
+    // page refresh mid-session. Adaptive level is sent with every
+    // /get-multiple-choice request (see loadQuestion / prefetchNextQuestion).
+    const DIFFICULTY_STORAGE_KEY = 'mindfold3d_difficulty_level';
+    function loadPersistedDifficultyLevel() {
+      try {
+        const raw = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
+        const parsed = parseInt(raw, 10);
+        if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 50) {
+          return parsed;
+        }
+      } catch (e) { /* storage unavailable; fall through */ }
+      return 1;
+    }
+    function persistDifficultyLevel(lvl) {
+      try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, String(lvl)); } catch (e) {}
+    }
+    let difficultyLevel = loadPersistedDifficultyLevel();
     let currentStreak = 0;
     let maxStreak = 0;
     const basePoints = 100; // Base points for a correct answer
@@ -969,9 +1003,19 @@
         // Keep the mode preference even when logging out
         const preferredMode = localStorage.getItem('mindfold3d-preferred-mode');
 
-        // No server-side logout endpoint in the guest build;
-        // clearing the token locally is sufficient to end the session.
-        window.location.href = '/static/auth.html';
+        if (token) {
+          fetch('/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }).catch(e => console.error("Logout request error:", e))
+            .finally(() => {
+              window.location.href = '/static/auth.html';
+            });
+        } else {
+          window.location.href = '/static/auth.html';
+        }
       } catch (error) {
         console.error('Logout error:', error);
         window.location.href = '/static/auth.html';
@@ -1086,6 +1130,39 @@
       // Check coaching availability
       checkCoachingStatus();
 
+      // Honor ?mode=builder / ?mode=recognition from the URL (used when
+      // handing off from Rhythm mode's mode switcher, for example).
+      const _urlMode = new URLSearchParams(window.location.search).get('mode');
+      if (_urlMode === 'builder' && typeof window.switchToBuilderMode === 'function') {
+        setTimeout(() => window.switchToBuilderMode(), 0);
+      } else if (_urlMode === 'recognition' && typeof window.switchToRecognitionMode === 'function') {
+        setTimeout(() => window.switchToRecognitionMode(), 0);
+      }
+
+      // Show the reviewer-context banner unless the user has dismissed it.
+      try {
+        const dismissed = localStorage.getItem('mindfold3d_context_dismissed') === '1';
+        const banner = document.getElementById('reviewer-context');
+        if (banner && !dismissed) {
+          banner.style.display = 'block';
+        }
+        const closeBtn = document.getElementById('reviewer-context-dismiss');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            if (banner) banner.style.display = 'none';
+            try { localStorage.setItem('mindfold3d_context_dismissed', '1'); } catch (e) {}
+          });
+        }
+      } catch (e) {
+        console.warn('Reviewer context banner init failed:', e);
+      }
+
+      // Reflect persisted adaptive difficulty level in the UI on page load.
+      try {
+        const lvlSpan = document.getElementById('difficulty-level');
+        if (lvlSpan) lvlSpan.textContent = difficultyLevel;
+      } catch (e) { /* non-fatal */ }
+
       // Load initial question for authenticated users
       loadQuestion();
     });
@@ -1148,7 +1225,6 @@
         dropdown.classList.remove('active');
       }
     });
-
 
     // Profile function
     window.showProfile = async function () {
@@ -1266,7 +1342,7 @@
           const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
           const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
           const expertMode = document.getElementById('expert-mode')?.checked || false;
-          const res = await fetch(`/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&expert_mode=${expertMode}`, {
+          const res = await fetch(`/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&generation_mode=skeleton&expert_mode=${expertMode}&difficulty_level=${difficultyLevel}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           console.log("*** DEBUG: API response status:", res.status);
@@ -1359,11 +1435,12 @@
           document.getElementById('error').textContent = "Error rendering shapes. Try refreshing the page.";
         }
 
-        // Render choice shapes
-        // Log choices data for debugging
+        // Render choice shapes — build all wrappers up front in a single
+        // DocumentFragment so the choice row appears together with the target,
+        // not one box at a time. This removes the 2-5s perceived lag between
+        // target and choices that reviewers noticed during the audit.
         console.log(`Preparing to render ${data.choices.length} choices`);
 
-        // Ensure we're only creating the exact number of choice boxes that we have shapes for
         const choicesContainer = document.getElementById('choices');
         choicesContainer.innerHTML = ''; // Clear any existing choices
 
@@ -1373,11 +1450,20 @@
           throw new Error("Invalid choices data");
         }
 
+        const fragment = document.createDocumentFragment();
+        const renderPlan = [];
+
         data.choices.forEach((shape, index) => {
-          // Skip if the shape is invalid
           if (!shape || !shape.id) {
             console.error(`*** DEBUG: Invalid shape at index ${index}, skipping`);
             return;
+          }
+
+          // Safety check to ensure voxels data is valid
+          if (!shape.voxels || !Array.isArray(shape.voxels) || shape.voxels.length === 0) {
+            console.error(`*** DEBUG: Missing or empty voxels data for choice ${index}. Creating default cube.`);
+            shape.voxels = [[0, 0, 0]];
+            shape.grid_size = [3, 3, 3];
           }
 
           const wrapperId = `choice-${index}`;
@@ -1388,33 +1474,29 @@
             <button class="choice" data-choice-id="${shape.id}" data-target-id="${window.currentTarget.id}" style="margin-top: 0.25rem;">Choose</button>
           `;
 
-          // Add event listener directly to the button we just created
-          setTimeout(() => {
-            const choiceBtn = wrapper.querySelector('.choice');
-            if (choiceBtn) {
-              choiceBtn.addEventListener('click', function () {
-                const choiceId = this.getAttribute('data-choice-id');
-                const targetId = this.getAttribute('data-target-id');
-                console.log("Choice button clicked directly:", choiceId, targetId);
-                window.selectChoice(choiceId, targetId);
-              });
-            }
-          }, 0);
-          document.getElementById('choices').appendChild(wrapper);
-          console.log(`*** DEBUG: Added choice wrapper ${index} with ID ${wrapperId}`);
-
-          // Safety check to ensure voxels data is valid
-          if (!shape.voxels || !Array.isArray(shape.voxels) || shape.voxels.length === 0) {
-            console.error(`*** DEBUG: Missing or empty voxels data for choice ${index}. Creating default cube.`);
-            shape.voxels = [[0, 0, 0]]; // Simple default cube at origin
-            shape.grid_size = [3, 3, 3]; // Default grid size
+          const choiceBtn = wrapper.querySelector('.choice');
+          if (choiceBtn) {
+            choiceBtn.addEventListener('click', function () {
+              const choiceId = this.getAttribute('data-choice-id');
+              const targetId = this.getAttribute('data-target-id');
+              console.log("Choice button clicked directly:", choiceId, targetId);
+              window.selectChoice(choiceId, targetId);
+            });
           }
 
-          // Initialize interaction tracker for this choice
+          fragment.appendChild(wrapper);
           window.interactionTracker[wrapperId] = createTracker(wrapperId, shape.id);
+          renderPlan.push({ wrapperId, shape, index });
+          console.log(`*** DEBUG: Queued choice wrapper ${index} with ID ${wrapperId}`);
+        });
 
-          // Use larger delay to ensure DOM is ready
-          setTimeout(() => {
+        // Append all wrappers in a single DOM op, then render all scenes
+        // in the next animation frame so layout resolves first (prevents the
+        // empty-canvas race) but without artificial per-choice stagger.
+        choicesContainer.appendChild(fragment);
+
+        requestAnimationFrame(() => {
+          renderPlan.forEach(({ wrapperId, shape, index }) => {
             console.log(`*** DEBUG: Rendering scene for choice ${index}, ${shape.voxels.length} voxels`);
             if (window.currentPerspective) {
               renderScene(wrapperId, shape.voxels, shape.grid_size, false, {
@@ -1424,7 +1506,7 @@
             } else {
               renderScene(wrapperId, shape.voxels, shape.grid_size, true);
             }
-          }, 100 * (index + 1)); // Stagger renders to prevent conflicts
+          });
         });
 
         window.currentTargetId = window.currentTarget.id; // Use the copied target's ID
@@ -1526,6 +1608,7 @@
         // Add streak bonus (every 3 correct answers increases the level)
         if (currentStreak > 0 && currentStreak % 3 === 0) {
           difficultyLevel++;
+          persistDifficultyLevel(difficultyLevel);
           document.getElementById('difficulty-level').textContent = difficultyLevel;
           document.getElementById('current-streak').classList.add('streak-bonus');
           setTimeout(() => document.getElementById('current-streak').classList.remove('streak-bonus'), 2000);
@@ -1567,7 +1650,7 @@
             }
             // Remove listener to prevent multiple triggers
             correctSound.removeEventListener('playing', triggerConfetti);
-          }, { once: true });
+          });
 
           // Try to play the sound
           const playPromise = correctSound.play();
@@ -1808,6 +1891,7 @@
 
       // Reset game state
       difficultyLevel = 1;
+      persistDifficultyLevel(difficultyLevel);
       currentStreak = 0;
       maxStreak = 0;
       document.getElementById('difficulty-level').textContent = difficultyLevel;
@@ -1828,6 +1912,22 @@
         return;
       }
 
+      // Guard against zero-size container (happens right after navigation when
+      // layout hasn't settled). Retry on the next animation frame so the canvas
+      // isn't initialized with aspect=NaN, which produces a blank WebGL viewport.
+      if (container.clientWidth === 0 || container.clientHeight === 0) {
+        const retries = (options._retries || 0);
+        if (retries < 5) {
+          console.warn(`Container #${containerId} has zero size; retrying renderScene (attempt ${retries + 1}/5)`);
+          requestAnimationFrame(() => {
+            renderScene(containerId, voxels, gridSize, randomRotate, { ...options, _retries: retries + 1 });
+          });
+          return;
+        }
+        // Fall through with a sane default if layout never settles.
+        console.warn(`Container #${containerId} still zero-sized after retries; rendering with fallback size.`);
+      }
+
       // Clear container
       container.innerHTML = '';
 
@@ -1835,8 +1935,11 @@
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xf0f0f0);
 
-      // Create camera with proper distance
-      const aspect = container.clientWidth / container.clientHeight;
+      // Create camera with proper distance. Fall back to 1 when layout is still
+      // pending so aspect is never NaN.
+      const cw = container.clientWidth || 1;
+      const ch = container.clientHeight || 1;
+      const aspect = cw / ch;
       const camera = new THREE.PerspectiveCamera(65, aspect, 0.1, 1000);
 
       // Camera positioning
@@ -1861,9 +1964,9 @@
 
       camera.lookAt(0, 0, 0);
 
-      // Create renderer
+      // Create renderer (use guarded sizes set above).
       const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setSize(cw, ch);
       container.appendChild(renderer.domElement);
 
       // Add lighting

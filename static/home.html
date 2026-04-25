@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MindFold 3D – Home</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+    }
+
+    /* Header — same visual language as auth.html */
+    header {
+      position: relative;
+      text-align: center;
+      padding: 20px 0;
+      background: white;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    header img.logo {
+      max-height: 96px;
+      width: auto;
+    }
+    header .tagline {
+      margin: 8px 0 0 0;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    /* User menu (top right) — mirrors index.html .user-menu pattern. */
+    .user-menu {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+    }
+    .user-button {
+      background: #fff;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .user-button:hover { background: #f7f7f7; }
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      min-width: 180px;
+      z-index: 100;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: #333;
+    }
+    .dropdown-menu button:hover { background: #f0f4f8; }
+    .dropdown-menu button.divider {
+      border-top: 1px solid #eee;
+      margin-top: 4px;
+      padding-top: 10px;
+    }
+
+    /* Main content */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    .welcome {
+      text-align: center;
+      margin: 0 0 28px 0;
+    }
+    .welcome h1 {
+      margin: 0 0 6px 0;
+      font-size: 1.6rem;
+      color: #222;
+      font-weight: 600;
+    }
+    .welcome p {
+      margin: 0;
+      color: #666;
+      font-size: 1rem;
+    }
+
+    /* Mode cards — responsive grid: 2-up on desktop, 1-up on phone */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .mode-card {
+      background: white;
+      border: 1px solid #e3e8ef;
+      border-radius: 12px;
+      padding: 24px 20px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      /* Reset button defaults so <button> elements look like cards. */
+      font-family: inherit;
+      color: inherit;
+      font-size: 1rem;
+      width: 100%;
+    }
+    .mode-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.10);
+      border-color: #c9d4e3;
+    }
+    .mode-card:focus-visible {
+      outline: 3px solid #007acc;
+      outline-offset: 2px;
+    }
+    .mode-card .icon-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 2rem;
+    }
+    .mode-card.recognition .icon-wrap { background: #007acc; }
+    .mode-card.builder     .icon-wrap { background: #555e6c; }
+
+    .mode-card h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: #222;
+      font-weight: 600;
+    }
+    .mode-card p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #5a6470;
+      line-height: 1.4;
+      max-width: 260px;
+    }
+
+    /* Secondary links row (Scorecard, Help) — small, subtle. */
+    .secondary-links {
+      margin-top: 28px;
+      text-align: center;
+    }
+    .secondary-links a {
+      display: inline-block;
+      margin: 0 10px;
+      color: #4a5666;
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+    .secondary-links a:hover {
+      background: #eef2f6;
+      color: #007acc;
+    }
+    .secondary-links i {
+      margin-right: 6px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 16px;
+      color: #9aa3ad;
+      font-size: 0.75rem;
+    }
+
+    /* Responsive: stack to 1 column on phones, 2 on tablets. */
+    @media (max-width: 880px) {
+      .mode-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 560px) {
+      header img.logo { max-height: 72px; }
+      main { padding: 20px 14px 32px; }
+      .welcome h1 { font-size: 1.3rem; }
+      .mode-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .mode-card { padding: 20px 16px; }
+      .mode-card .icon-wrap {
+        width: 60px;
+        height: 60px;
+        font-size: 1.7rem;
+      }
+      .user-button { font-size: 0.8rem; padding: 5px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="user-menu">
+      <button id="user-button" class="user-button" aria-haspopup="true" aria-expanded="false">
+        <i class="fas fa-user"></i> <span id="user-button-label">Account</span>
+      </button>
+      <div id="dropdown-menu" class="dropdown-menu" role="menu">
+        <button onclick="window.location.href='/profile'"><i class="fas fa-id-card"></i> Profile</button>
+        <button onclick="window.location.href='/static/scorecard.html'"><i class="fas fa-chart-line"></i> Performance Scorecard</button>
+        <button class="divider" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </div>
+
+    <img src="/static/logo.png" alt="MindFold 3D Logo" class="logo" />
+    <p class="tagline">Train your brain with spatial reasoning</p>
+  </header>
+
+  <main>
+    <div class="welcome">
+      <h1 id="welcome-heading">Welcome.</h1>
+      <p>Pick a training mode to get started.</p>
+    </div>
+
+    <div class="mode-grid">
+      <button type="button" class="mode-card recognition" onclick="goToMode('recognition')" aria-label="Multiple Choice mode">
+        <div class="icon-wrap"><i class="fas fa-eye"></i></div>
+        <h2>Multiple Choice</h2>
+        <p>Match a target 3D shape to one of four choices. The classic recognition challenge.</p>
+      </button>
+
+      <button type="button" class="mode-card builder" onclick="goToMode('builder')" aria-label="Structure Builder mode">
+        <div class="icon-wrap"><i class="fas fa-cubes"></i></div>
+        <h2>Structure Builder</h2>
+        <p>Recreate the target structure by adding and removing cubes one at a time.</p>
+      </button>
+
+    </div>
+
+    <div class="secondary-links">
+      <a href="/static/scorecard.html"><i class="fas fa-chart-line"></i>Performance Scorecard</a>
+      <a href="/profile"><i class="fas fa-id-card"></i>Profile</a>
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2024-2026 The Pennsylvania State University &middot; Patent Pending
+  </footer>
+
+  <script>
+    // ---- Auth gate -----------------------------------------------------
+    // If the user has no token, send them to the login page. Mirrors the
+    // gate in index.html so the home route stays behind auth.
+    (function ensureAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/static/auth.html';
+      }
+    })();
+
+    // ---- Mode routing --------------------------------------------------
+    // Recognition + Builder live in index.html (selected via ?mode=...
+    // query string already supported by index.html's _urlMode handler).
+    function goToMode(mode) {
+      try {
+        localStorage.setItem('mindfold3d-preferred-mode', mode);
+      } catch (e) { /* ignore quota errors */ }
+
+      if (mode === 'builder') {
+        window.location.href = '/?mode=builder';
+      } else {
+        // Default: recognition (multiple choice)
+        window.location.href = '/?mode=recognition';
+      }
+    }
+
+    // ---- User menu dropdown -------------------------------------------
+    const userBtn = document.getElementById('user-button');
+    const dropdown = document.getElementById('dropdown-menu');
+    userBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const open = dropdown.classList.toggle('open');
+      userBtn.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('click', function (e) {
+      if (!dropdown.contains(e.target) && e.target !== userBtn) {
+        dropdown.classList.remove('open');
+        userBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // ---- Logout (matches handleStandaloneLogout in index.html) --------
+    function logout() {
+      try {
+        const token = localStorage.getItem('token');
+        localStorage.removeItem('token');
+        if (token) {
+          fetch('/logout', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+          }).catch(function (err) { console.error('Logout request error:', err); })
+            .finally(function () { window.location.href = '/static/auth.html'; });
+        } else {
+          window.location.href = '/static/auth.html';
+        }
+      } catch (err) {
+        console.error('Logout error:', err);
+        window.location.href = '/static/auth.html';
+      }
+    }
+
+    // ---- Personalize welcome line --------------------------------------
+    // Best-effort: hit /profile to get a username; fall back silently.
+    (function personalizeGreeting() {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      fetch('/profile', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.username) return;
+          const name = data.username;
+          // Hide the "guest" username — the welcome line should feel neutral
+          // rather than calling guests "guest".
+          if (name && name.toLowerCase() !== 'guest') {
+            document.getElementById('welcome-heading').textContent = 'Welcome back, ' + name + '.';
+            document.getElementById('user-button-label').textContent = name;
+          }
+        })
+        .catch(function () { /* ignore — keep default greeting */ });
+    })();
+  </script>
+</body>
+</html>

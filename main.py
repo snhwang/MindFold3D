@@ -144,6 +144,12 @@ class CoachingResponse(BaseModel):
 def serve_root():
     return FileResponse("static/index.html")
 
+@app.get("/home")
+def serve_home():
+    # Mode picker landing page. Auth gate is handled client-side in home.html
+    # the same way it is in index.html (token check + redirect to auth.html).
+    return FileResponse("static/home.html")
+
 @app.get("/login")
 def serve_login():
     return FileResponse("static/auth.html")
@@ -1014,35 +1020,59 @@ def _compute_scorecard(user_id: int) -> dict:
     persistent_total = user_stats.total_questions
     persistent_correct = user_stats.correct_answers
 
-    # Find weak areas for session (features with < 50% success rate and at least 3 attempts)
-    session_weak_areas = []
-    for feature, values in session_full_stats.items():
-        for value, stats in values.items():
-            if stats["total_attempts"] >= 3 and stats["success_rate"] < 50:
-                session_weak_areas.append({
+    # Find weak / strong areas for session.
+    # Weak: success_rate < 50% with >= 3 attempts.
+    # Strong: success_rate >= 80% with >= 3 attempts.
+    # The 3-attempt floor avoids treating a single lucky/unlucky trial as a verdict.
+    WEAK_THRESHOLD = 50
+    STRONG_THRESHOLD = 80
+    MIN_ATTEMPTS_FOR_VERDICT = 3
+
+    def _split_strong_weak(full_stats: dict):
+        weak, strong = [], []
+        for feature, values in full_stats.items():
+            for value, stats in values.items():
+                if stats["total_attempts"] < MIN_ATTEMPTS_FOR_VERDICT:
+                    continue
+                entry = {
                     "feature": feature,
                     "value": value,
                     "success_rate": stats["success_rate"],
-                    "attempts": stats["total_attempts"]
-                })
+                    "attempts": stats["total_attempts"],
+                }
+                if stats["success_rate"] < WEAK_THRESHOLD:
+                    weak.append(entry)
+                elif stats["success_rate"] >= STRONG_THRESHOLD:
+                    strong.append(entry)
+        # Weak: ascending (worst first). Strong: descending (best first).
+        weak.sort(key=lambda x: x["success_rate"])
+        strong.sort(key=lambda x: x["success_rate"], reverse=True)
+        return weak, strong
 
-    # Sort weak areas by success rate (ascending)
-    session_weak_areas.sort(key=lambda x: x["success_rate"])
+    session_weak_areas, session_strong_areas = _split_strong_weak(session_full_stats)
+    persistent_weak_areas, persistent_strong_areas = _split_strong_weak(persistent_full_stats)
 
-    # Find weak areas for persistent data
-    persistent_weak_areas = []
-    for feature, values in persistent_full_stats.items():
-        for value, stats in values.items():
-            if stats["total_attempts"] >= 3 and stats["success_rate"] < 50:
-                persistent_weak_areas.append({
-                    "feature": feature,
-                    "value": value,
-                    "success_rate": stats["success_rate"],
-                    "attempts": stats["total_attempts"]
-                })
+    # Overall average response time across all attempts in the current session.
+    session_response_times = [
+        a.get("response_time")
+        for a in session_data.get("attempts", [])
+        if a.get("response_time") is not None
+    ]
+    session_avg_rt = (
+        sum(session_response_times) / len(session_response_times)
+        if session_response_times else None
+    )
 
-    # Sort weak areas by success rate (ascending)
-    persistent_weak_areas.sort(key=lambda x: x["success_rate"])
+    # Cumulative average response time: weighted average of per-feature-value response times.
+    # We don't store individual attempt RTs cumulatively, so compute from the per-value buckets.
+    persistent_rt_sum = 0.0
+    persistent_rt_count = 0
+    for feature, values in persistent_feature_stats.items():
+        for value, record in values.items():
+            rts = record.get("response_times", []) if isinstance(record, dict) else []
+            persistent_rt_sum += sum(rts)
+            persistent_rt_count += len(rts)
+    persistent_avg_rt = (persistent_rt_sum / persistent_rt_count) if persistent_rt_count > 0 else None
 
     # Add diagnostic information
     print(f"Session data - Total questions: {session_total}, Features with data: {len(session_data.get('feature_stats', {}))}")
@@ -1125,8 +1155,10 @@ def _compute_scorecard(user_id: int) -> dict:
             "total_questions": session_total,
             "correct_answers": session_correct,
             "accuracy": round((session_correct / session_total * 100) if session_total > 0 else 0, 2),
+            "avg_response_time": session_avg_rt,
             "feature_scorecard": session_full_stats,
-            "weak_areas": session_weak_areas[:5],  # Return top 5 weakest areas
+            "weak_areas": session_weak_areas[:5],  # Top 5 weakest (worst first)
+            "strong_areas": session_strong_areas[:5],  # Top 5 strongest (best first)
             "task_variant_stats": task_variant_stats,
             "interaction_scorecard": session_interaction,
             "rt_by_angular_disparity": rt_by_disparity,
@@ -1140,8 +1172,10 @@ def _compute_scorecard(user_id: int) -> dict:
             "total_questions": persistent_total,
             "correct_answers": persistent_correct,
             "accuracy": round((persistent_correct / persistent_total * 100) if persistent_total > 0 else 0, 2),
+            "avg_response_time": persistent_avg_rt,
             "feature_scorecard": persistent_full_stats,
-            "weak_areas": persistent_weak_areas[:5],  # Return top 5 weakest areas
+            "weak_areas": persistent_weak_areas[:5],  # Top 5 weakest (worst first)
+            "strong_areas": persistent_strong_areas[:5],  # Top 5 strongest (best first)
             "interaction_scorecard": persistent_interaction,
             "debug_info": {
                 "features_count": len(persistent_feature_stats),
