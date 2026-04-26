@@ -803,42 +803,43 @@
 
         // Display debug information
         const debugEl = DEBUG_ENABLED ? document.getElementById('debug-info') : null;
-        if (debugEl) debugEl.innerHTML = `
-          <div style="margin-bottom: 15px;">
-            <strong>Session data:</strong>
-            <ul>
-              <li>Questions: ${sessionTotal}</li>
-              <li>Has feature data: ${sessionScoreData.debug_info?.has_feature_data || false}</li>
-              <li>Features with data: ${sessionScoreData.debug_info?.features_count || 0}</li>
-              <li>Feature categories with entries: ${Object.keys(sessionFeatureScorecard).filter(k => 
-                 sessionFeatureScorecard[k] && Object.keys(sessionFeatureScorecard[k]).length > 0).length}</li>
-            </ul>
-          </div>
-          <div>
-            <strong>Cumulative data:</strong>
-            <ul>
-              <li>Questions: ${cumulativeTotal}</li>
-              <li>Has feature data: ${cumulativeScoreData.debug_info?.has_feature_data || false}</li>
-              <li>Features with data: ${cumulativeScoreData.debug_info?.features_count || 0}</li>
-              <li>Feature categories with entries: ${Object.keys(cumulativeFeatureScorecard).filter(k => 
-                 cumulativeFeatureScorecard[k] && Object.keys(cumulativeFeatureScorecard[k]).length > 0).length}</li>
-            </ul>
-          </div>
-          <div>
-            <strong>Raw data examination:</strong>
-            <pre style="max-height: 100px; overflow-y: auto; font-size: 10px; background: #f5f5f5; padding: 5px; margin-top: 10px;">
-Session feature_stats sample: ${JSON.stringify(Object.keys(sessionFeatureScorecard).slice(0, 3).reduce((obj, key) => {
-                obj[key] = sessionFeatureScorecard[key];
-                return obj;
-              }, {}), null, 2)}
+        if (debugEl) {
+          const sessionCats = Object.keys(sessionFeatureScorecard)
+            .filter(k => sessionFeatureScorecard[k] && Object.keys(sessionFeatureScorecard[k]).length > 0).length;
+          const cumulativeCats = Object.keys(cumulativeFeatureScorecard)
+            .filter(k => cumulativeFeatureScorecard[k] && Object.keys(cumulativeFeatureScorecard[k]).length > 0).length;
 
-Cumulative feature_stats sample: ${JSON.stringify(Object.keys(cumulativeFeatureScorecard).slice(0, 3).reduce((obj, key) => {
-                obj[key] = cumulativeFeatureScorecard[key];
-                return obj;
-              }, {}), null, 2)}
-            </pre>
-          </div>
-        `;
+          debugEl.innerHTML =
+            `<div style="margin-bottom: 15px;">` +
+            `<strong>Session data:</strong><ul>` +
+            `<li>Questions: ${escapeHtml(String(sessionTotal))}</li>` +
+            `<li>Has feature data: ${escapeHtml(String(sessionScoreData.debug_info?.has_feature_data || false))}</li>` +
+            `<li>Features with data: ${escapeHtml(String(sessionScoreData.debug_info?.features_count || 0))}</li>` +
+            `<li>Feature categories with entries: ${escapeHtml(String(sessionCats))}</li>` +
+            `</ul></div>` +
+            `<div><strong>Cumulative data:</strong><ul>` +
+            `<li>Questions: ${escapeHtml(String(cumulativeTotal))}</li>` +
+            `<li>Has feature data: ${escapeHtml(String(cumulativeScoreData.debug_info?.has_feature_data || false))}</li>` +
+            `<li>Features with data: ${escapeHtml(String(cumulativeScoreData.debug_info?.features_count || 0))}</li>` +
+            `<li>Feature categories with entries: ${escapeHtml(String(cumulativeCats))}</li>` +
+            `</ul></div>` +
+            `<div><strong>Raw data examination:</strong></div>`;
+
+          // Use a text node for the raw JSON to prevent HTML injection from
+          // server-supplied feature values.
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'max-height:100px;overflow-y:auto;font-size:10px;background:#f5f5f5;padding:5px;margin-top:10px;';
+          const sessionSample = Object.keys(sessionFeatureScorecard).slice(0, 3).reduce((obj, key) => {
+            obj[key] = sessionFeatureScorecard[key]; return obj;
+          }, {});
+          const cumulativeSample = Object.keys(cumulativeFeatureScorecard).slice(0, 3).reduce((obj, key) => {
+            obj[key] = cumulativeFeatureScorecard[key]; return obj;
+          }, {});
+          pre.textContent =
+            'Session feature_stats sample: ' + JSON.stringify(sessionSample, null, 2) +
+            '\n\nCumulative feature_stats sample: ' + JSON.stringify(cumulativeSample, null, 2);
+          debugEl.appendChild(pre);
+        }
         // debugEl may be null when DEBUG_ENABLED=false; subsequent appends are guarded.
 
         // Populate feature selector for current mode

@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>MindFold 3D – Match the Shape</title>
+  <!--OG_META-->
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -846,6 +847,132 @@
       button.choice { font-size: 0.75rem !important; padding: 0.3rem 0.2rem !important; }
     }
 
+    /* ── Phone-only top bar (back / stats / settings) ──
+       Hidden by default; shown on phones when body.mc-active is set.
+       Replaces the old icon-strip mode-navigation row. */
+    #mc-topbar { display: none; }
+    @media (max-width: 640px) {
+      body.mc-active #mc-topbar {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px;
+        margin-bottom: 4px;
+        background: #f5f7fa;
+        border-bottom: 1px solid #d8e0e8;
+        font-size: 0.78rem;
+        gap: 8px;
+      }
+      body.mc-active #mc-topbar .topbar-btn {
+        background: white;
+        border: 1px solid #c0c8d0;
+        border-radius: 50%;
+        width: 36px; height: 36px;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: #555;
+        text-decoration: none;
+        cursor: pointer;
+        font-size: 1rem;
+        flex: 0 0 auto;
+        padding: 0;
+      }
+      body.mc-active.mc-settings-open #mc-topbar .topbar-btn[data-role="settings"] {
+        background: #007acc; color: white; border-color: #007acc;
+      }
+      body.mc-active #mc-topbar #mc-stats-inline {
+        display: flex; gap: 12px; opacity: 0.85;
+        flex: 1; justify-content: center;
+        color: #2a3b4d;
+      }
+      body.mc-active #mc-topbar #mc-stats-inline span { white-space: nowrap; }
+      /* Compact logo next to the back button so the brand is still present
+         in the slimmed-down phone header. */
+      body.mc-active #mc-topbar #mc-topbar-logo {
+        height: 28px; width: auto;
+        flex: 0 0 auto;
+        display: block;
+      }
+      /* Very narrow phones: hide the logo so back / stats / gear stay
+         comfortably spaced. */
+      @media (max-width: 360px) {
+        body.mc-active #mc-topbar #mc-topbar-logo { display: none; }
+      }
+      /* Hide bottom stats on phones — they're in the top bar now. */
+      body.mc-active #difficulty-info,
+      body.mc-active .streak-info,
+      body.mc-active #score { display: none !important; }
+      /* Hide bottom gear / stop / restart row on phones — back button in top
+         bar is the way out, and the gear in the top bar opens settings. */
+      body.mc-active #mc-bottom-actions { display: none !important; }
+      /* Reduce controls padding now that the bottom is leaner. */
+      body.mc-active .controls-container { padding: 2px 4px !important; }
+    }
+
+    /* ── AI Coach popup modal (after-answer feedback) ──
+       The legacy in-panel coaching block is converted to a centered modal
+       so it doesn't eat the bottom third of small phone screens. */
+    #coaching-modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1999;
+    }
+    #coaching-modal-backdrop.active { display: block; }
+    #coaching-panel.coaching-modal {
+      position: fixed !important;
+      top: 50% !important; left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      width: calc(100% - 32px) !important;
+      max-width: 480px !important;
+      max-height: 70vh !important;
+      z-index: 2000 !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3) !important;
+      padding: 16px !important;
+      font-size: 0.92rem !important;
+      overflow-y: auto !important;
+      border-radius: 8px !important;
+    }
+    #coaching-panel.coaching-modal #coaching-text {
+      font-size: 0.92rem;
+      line-height: 1.45;
+      max-height: 38vh;
+      overflow-y: auto;
+    }
+    #coaching-next-btn {
+      display: none;
+      margin: 10px auto 0;
+      background: #6c5ce7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #coaching-panel.coaching-modal #coaching-next-btn { display: block; }
+    #coaching-next-btn:hover { background: #5848d6; }
+
+    /* ── Builder mode: responsive viewers ──
+       The inline style sets width/height to 250px; on phones that is fine
+       (250 < 440) but on very narrow screens or in landscape it can clip.
+       Use min() so the viewer never exceeds 250px and never exceeds 90vw. */
+    @media (max-width: 640px) {
+      #builder-area #builder-target,
+      #builder-area #builder-workspace {
+        width: min(250px, 90vw) !important;
+        height: min(250px, 90vw) !important;
+      }
+      #builder-area > div > div { align-items: center !important; }
+    }
+
+    /* ── Task settings bar: allow wrapping on narrow screens ──
+       Before mc-active kicks in, the settings row can overflow at ~440px. */
+    #task-settings {
+      flex-wrap: wrap;
+      row-gap: 6px;
+    }
+
   </style>
 </head>
 
@@ -871,6 +998,19 @@
   </header>
 
   <div id="container">
+    <!-- Phone-only top bar: shown on mobile in mc-active mode. Replaces the
+         icon-strip mode-navigation row so the user gets back the vertical
+         space those buttons used to occupy. -->
+    <div id="mc-topbar" aria-hidden="true">
+      <a class="topbar-btn" href="/home" data-role="back" aria-label="Back to menu" title="Back to menu"><i class="fas fa-arrow-left"></i></a>
+      <img id="mc-topbar-logo" src="/static/logo.png" alt="MindFold 3D" />
+      <div id="mc-stats-inline">
+        <span title="Difficulty level">L<span id="mc-stats-level">1</span></span>
+        <span title="Current streak"><i class="fas fa-fire" style="color:#ff8c42;"></i> <span id="mc-stats-streak">0</span></span>
+      </div>
+      <button class="topbar-btn" type="button" data-role="settings" onclick="window.toggleMcSettings()" aria-label="Settings" title="Settings"><i class="fas fa-cog"></i></button>
+    </div>
+
     <!-- Mode Navigation -->
     <div class="mode-navigation"
       style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.5rem; background: #f5f5f5; padding: 6px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -936,10 +1076,11 @@
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: bold; color: #6c5ce7; font-size: 0.72rem;"><i class="fas fa-brain"></i> AI
               Coach</span>
-            <button onclick="dismissCoaching()"
-              style="background:none; border:none; cursor:pointer; color:#999; font-size:0.7rem; padding:0 2px;">&times;</button>
+            <button onclick="dismissCoaching()" aria-label="Close"
+              style="background:none; border:none; cursor:pointer; color:#999; font-size:1.1rem; padding:0 4px; line-height:1;">&times;</button>
           </div>
           <div id="coaching-text" style="margin-top: 3px; color: #333; line-height: 1.35;"></div>
+          <button id="coaching-next-btn" type="button" onclick="dismissCoaching()">Next question →</button>
         </div>
         <div id="score" style="text-align: center;"></div>
         <div id="error" style="text-align: center;"></div>
@@ -968,6 +1109,10 @@
             title="Expert mode: 15-25 voxels in 10×10×10 grid with high topological complexity">
             <input type="checkbox" id="expert-mode" /> Expert
           </label>
+          <label style="font-weight: bold; margin-left: 4px;"
+            title="Show AI Coach popup after each answer">
+            <input type="checkbox" id="ai-coach-mode" checked /> AI Coach
+          </label>
           <!-- Quick links shown only inside the phone settings panel
                (CSS rule body.mc-active.mc-settings-open). On desktop /
                tablet this stays hidden (#mc-quick-links { display: none }). -->
@@ -977,7 +1122,7 @@
           </div>
         </div>
 
-        <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+        <div id="mc-bottom-actions" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
           <button id="mc-settings-toggle" type="button" onclick="window.toggleMcSettings()"
             aria-label="Settings" title="Settings">
             <i class="fas fa-cog"></i>
@@ -993,6 +1138,9 @@
     </div>
 
     <!-- Builder Mode -->
+    <!-- Backdrop for the AI Coach modal popup. -->
+    <div id="coaching-modal-backdrop" onclick="dismissCoaching()" aria-hidden="true"></div>
+
     <div id="builder-area" style="display:none;">
       <h2 style="text-align:center;">Structure Builder</h2>
       <div style="display:flex; flex-direction:column; align-items:center;">
@@ -1298,9 +1446,42 @@
       }
     }
 
+    // ── Coaching helpers ─────────────────────────────────────────
+    // The AI Coach is now shown as a centered modal (with a backdrop) so it
+    // doesn't permanently consume the bottom of the play area on phones.
+    // After-answer coaching also pauses the auto-advance until the user
+    // dismisses the modal — that's what window._pendingCoachAdvance carries.
+    function isCoachEnabled() {
+      const cb = document.getElementById('ai-coach-mode');
+      return cb ? !!cb.checked : true;
+    }
+    function openCoachingModal() {
+      const panel = document.getElementById('coaching-panel');
+      const backdrop = document.getElementById('coaching-modal-backdrop');
+      if (panel) {
+        panel.classList.add('coaching-modal');
+        panel.style.display = 'block';
+      }
+      if (backdrop) backdrop.classList.add('active');
+    }
+    function closeCoachingModal() {
+      const panel = document.getElementById('coaching-panel');
+      const backdrop = document.getElementById('coaching-modal-backdrop');
+      if (panel) {
+        panel.style.display = 'none';
+        panel.classList.remove('coaching-modal');
+      }
+      if (backdrop) backdrop.classList.remove('active');
+    }
+
     async function showCoachingFeedback(wasCorrect, responseTime, targetFeatures, interactionData) {
       const token = localStorage.getItem('token');
       if (!token) return;
+      // Show modal immediately with a spinner so the user sees that something
+      // is being prepared even before the network round-trip completes.
+      const textEl = document.getElementById('coaching-text');
+      openCoachingModal();
+      if (textEl) textEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
       try {
         const resp = await fetch('/coaching/feedback', {
           method: 'POST',
@@ -1322,19 +1503,21 @@
         if (resp.ok) {
           const data = await resp.json();
           displayCoaching(data.coaching_text, data.source);
+        } else if (textEl) {
+          textEl.textContent = 'Coaching unavailable right now.';
         }
       } catch (e) {
         console.log('Coaching feedback error:', e);
+        if (textEl) textEl.textContent = 'Coaching service unreachable.';
       }
     }
 
     window.requestCoaching = async function () {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const panel = document.getElementById('coaching-panel');
       const textEl = document.getElementById('coaching-text');
-      panel.style.display = 'block';
-      textEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
+      openCoachingModal();
+      if (textEl) textEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
       try {
         const resp = await fetch('/coaching/advice', {
           method: 'POST',
@@ -1347,17 +1530,18 @@
         if (resp.ok) {
           const data = await resp.json();
           displayCoaching(data.coaching_text, data.source);
-        } else {
+        } else if (textEl) {
           textEl.textContent = 'Could not get coaching advice.';
         }
       } catch (e) {
-        textEl.textContent = 'Could not reach the coaching service.';
+        if (textEl) textEl.textContent = 'Could not reach the coaching service.';
       }
     };
 
     function displayCoaching(text, source) {
       const panel = document.getElementById('coaching-panel');
       const textEl = document.getElementById('coaching-text');
+      if (!panel || !textEl) return;
       panel.style.display = 'block';
       textEl.innerHTML = text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -1366,7 +1550,14 @@
     }
 
     window.dismissCoaching = function () {
-      document.getElementById('coaching-panel').style.display = 'none';
+      closeCoachingModal();
+      // If a post-answer advance is queued, run it now so dismissing the
+      // coach popup also moves us on to the next question.
+      if (typeof window._pendingCoachAdvance === 'function') {
+        const next = window._pendingCoachAdvance;
+        window._pendingCoachAdvance = null;
+        next();
+      }
     };
 
     document.addEventListener('DOMContentLoaded', async function () {
@@ -1385,14 +1576,43 @@
       // Check coaching availability
       checkCoachingStatus();
 
-      // Honor ?mode=builder / ?mode=recognition from the URL (used when
-      // handing off from Rhythm mode's mode switcher, for example).
+      // Honor ?mode=builder / ?mode=recognition from the URL.
+      // Default (no mode param): recognition mode is the visible default in
+      // markup, so flip body.mc-active on too — phone CSS depends on it.
       const _urlMode = new URLSearchParams(window.location.search).get('mode');
       if (_urlMode === 'builder' && typeof window.switchToBuilderMode === 'function') {
         setTimeout(() => window.switchToBuilderMode(), 0);
-      } else if (_urlMode === 'recognition' && typeof window.switchToRecognitionMode === 'function') {
+      } else if (typeof window.switchToRecognitionMode === 'function') {
         setTimeout(() => window.switchToRecognitionMode(), 0);
       }
+
+      // Restore AI Coach toggle state and persist changes.
+      const coachToggle = document.getElementById('ai-coach-mode');
+      if (coachToggle) {
+        const stored = localStorage.getItem('mindfold3d_coach_enabled');
+        if (stored !== null) coachToggle.checked = stored === '1';
+        coachToggle.addEventListener('change', () => {
+          localStorage.setItem('mindfold3d_coach_enabled', coachToggle.checked ? '1' : '0');
+        });
+      }
+
+      // Mirror difficulty / streak into the phone top-bar inline display.
+      const _syncTopbarStat = (srcId, dstId) => {
+        const s = document.getElementById(srcId);
+        const d = document.getElementById(dstId);
+        if (s && d) d.textContent = s.textContent;
+      };
+      const _syncAllTopbarStats = () => {
+        _syncTopbarStat('difficulty-level', 'mc-stats-level');
+        _syncTopbarStat('current-streak', 'mc-stats-streak');
+      };
+      ['difficulty-level', 'current-streak'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) new MutationObserver(_syncAllTopbarStats).observe(el, {
+          childList: true, characterData: true, subtree: true
+        });
+      });
+      _syncAllTopbarStats();
 
       // Show the reviewer-context banner unless the user has dismissed it.
       try {
@@ -2043,12 +2263,16 @@
       // Fire coaching feedback asynchronously (non-blocking)
       const targetFeatures = (window.currentTarget && window.currentTarget.features)
         ? JSON.parse(JSON.stringify(window.currentTarget.features)) : {};
-      showCoachingFeedback(correct, responseTime, targetFeatures, interactionData);
-
-      setTimeout(() => {
+      const advance = () => {
         feedbackElement.className = ''; // Clear animation classes
         loadQuestion();
-      }, 1000);
+      };
+      if (isCoachEnabled()) {
+        window._pendingCoachAdvance = advance;
+        showCoachingFeedback(correct, responseTime, targetFeatures, interactionData);
+      } else {
+        setTimeout(advance, 1000);
+      }
     };
 
     window.endSession = async function () {
@@ -2209,10 +2433,37 @@
           camera.up.set(0, 1, 0);
         }
       } else if (containerId === 'target' || containerId.startsWith('choice-')) {
-        // Scale camera distance based on voxel count for expert-sized shapes
-        const voxelCount = (voxels && Array.isArray(voxels)) ? voxels.length : 0;
-        const camDist = voxelCount > 15 ? 8 : 5;
-        camera.position.set(camDist, camDist, camDist);
+        // Auto-fit: compute the shape's bounding sphere and place the camera
+        // at exactly the distance needed to frame it, plus a padding factor.
+        // This replaces the old fixed 5 / 8 distances, which left small shapes
+        // looking "zoomed in" on tiny mobile cells where there's no room.
+        let radius = 1.0;
+        if (voxels && Array.isArray(voxels) && voxels.length > 0) {
+          let minX = Infinity, minY = Infinity, minZ = Infinity;
+          let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+          voxels.forEach(([x, y, z]) => {
+            minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+          });
+          // Each voxel is a 1×1×1 cube, so add 1 for the cube extent.
+          const sx = (maxX - minX + 1) / 2;
+          const sy = (maxY - minY + 1) / 2;
+          const sz = (maxZ - minZ + 1) / 2;
+          radius = Math.sqrt(sx * sx + sy * sy + sz * sz);
+        }
+        // Phones get larger padding (more zoomed out) so the shape doesn't
+        // crowd the cell — the user explicitly asked for less zoom on mobile.
+        const isPhone = window.innerWidth <= 640;
+        const padding = isPhone ? 1.7 : 1.3;
+        const fovRad = camera.fov * Math.PI / 180;
+        // Fit the sphere in the smaller of the vertical/horizontal FOV so
+        // portrait cells (aspect < 1) zoom out enough to fit the width too.
+        const vFitDist = radius / Math.tan(fovRad / 2);
+        const hFitDist = aspect < 1 ? vFitDist / aspect : vFitDist;
+        const desiredDistance = Math.max(vFitDist, hFitDist) * padding;
+        // Camera sits at (D,D,D), so its distance from origin is D·√3.
+        const D = desiredDistance / Math.sqrt(3);
+        camera.position.set(D, D, D);
       } else {
         camera.position.set(3, 3, 3); // Default camera position
       }
@@ -2312,6 +2563,13 @@
         controls.rotateSpeed = 2.0;
         controls.zoomSpeed = 1.2;
         controls.panSpeed = 0.8;
+        // On phones the cells are tiny — pinch-zoom and two-finger pan just
+        // push the shape off-frame and there is no room to recover. Lock
+        // them down and let the user only rotate.
+        if (window.innerWidth <= 640) {
+          controls.noZoom = true;
+          controls.noPan = true;
+        }
 
         // Hook TrackballControls events for interaction tracking
         const tracker = window.interactionTracker[containerId];

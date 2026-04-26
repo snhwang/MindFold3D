@@ -23,7 +23,8 @@ from typing import List, Optional
 from fastapi import Body, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Response
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, HTMLResponse
+from html import escape as _html_escape
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -70,12 +71,12 @@ app.add_middleware(
 
 app.include_router(auth_routes.router)
 
-# Session data for current session
+# Per-user runtime state — the only top-level key in use is "per_user".
+# All per-session counters and feature stats live under
+# session_data["per_user"][session_key] (see get_user_runtime_state).
+# Kept in memory only; nothing here is persisted to the database.
 session_data = {
-    "total_questions": 0,
-    "correct_answers": 0,
-    "attempts": [],
-    "feature_errors": {}
+    "per_user": {},
 }
 
 # Persistent data across all sessions
@@ -86,6 +87,55 @@ persistent_data = {
     "feature_errors": {},
     "feature_stats": {}
 }
+
+def get_session_key(user) -> str:
+    """Return the in-memory session key for *user*.
+
+    Authenticated users are keyed by their string-cast integer PK.
+    In public, auth.get_current_user attaches ``user.session_key = str(user.id)``
+    for all users (guests have real PKs via create_guest_user).
+    Falling back to ``str(user.id)`` handles any edge cases.
+    """
+    return getattr(user, "session_key", str(user.id))
+
+
+def get_user_runtime_state(session_key: str) -> dict:
+    """Return (and lazily initialize) the per-user runtime state dict.
+
+    The returned dict lives under ``session_data["per_user"][session_key]``
+    and holds target-buffering state (``recent_target_canonicals``,
+    ``target_buffer``, ``question_counter``) as well as per-session stats
+    (``total_questions``, ``correct_answers``, ``attempts``,
+    ``feature_stats``, ``feature_errors``).
+
+    Using a per-user key means concurrent users never share in-memory state.
+    """
+    per_user = session_data.setdefault("per_user", {})
+    state = per_user.get(session_key)
+    if state is None:
+        state = {
+            "recent_target_canonicals": [],
+            "target_buffer": {},
+            "question_counter": 0,
+            "total_questions": 0,
+            "correct_answers": 0,
+            "attempts": [],
+            "feature_errors": {},
+            "feature_stats": {},
+        }
+        per_user[session_key] = state
+    else:
+        # Backfill missing keys for users whose state predates a field.
+        state.setdefault("recent_target_canonicals", [])
+        state.setdefault("target_buffer", {})
+        state.setdefault("question_counter", 0)
+        state.setdefault("total_questions", 0)
+        state.setdefault("correct_answers", 0)
+        state.setdefault("attempts", [])
+        state.setdefault("feature_errors", {})
+        state.setdefault("feature_stats", {})
+    return state
+
 
 class ShapeResponse(BaseModel):
     id: str
@@ -140,19 +190,83 @@ class CoachingResponse(BaseModel):
     model: Optional[str] = None
     latency_ms: Optional[float] = None
 
+# ── Social/link-preview helper ───────────────────────────────────
+# When a user shares a link to MindFold 3D in iMessage, WhatsApp, Slack,
+# Discord, etc., those apps look at the page's <head> for Open Graph and
+# Twitter Card meta tags to render a preview card (title, description,
+# image). We inject those tags at request time so the absolute URLs work
+# correctly regardless of which domain the app is being served from
+# (replit.app preview, custom domain, etc.).
+def _serve_html_with_meta(html_path: str, request: Request, title: str,
+                          description: str) -> HTMLResponse:
+    """Read an HTML file and inject Open Graph / Twitter meta tags in
+    place of the `<!--OG_META-->` placeholder. If the placeholder is not
+    present the file is returned unchanged."""
+    with open(html_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    # Honor X-Forwarded-* so Replit's HTTPS proxy gives us the right URL
+    # even though uvicorn itself sees plain HTTP behind the proxy.
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme) or "https"
+    host = request.headers.get("x-forwarded-host") or request.url.netloc
+    base = f"{scheme}://{host}"
+    image_url = f"{base}/static/logo.png"
+    page_url = f"{base}{request.url.path}"
+
+    t = _html_escape(title, quote=True)
+    d = _html_escape(description, quote=True)
+    img = _html_escape(image_url, quote=True)
+    url_e = _html_escape(page_url, quote=True)
+
+    meta = (
+        f'<meta name="description" content="{d}" />\n    '
+        f'<meta property="og:title" content="{t}" />\n    '
+        f'<meta property="og:description" content="{d}" />\n    '
+        f'<meta property="og:type" content="website" />\n    '
+        f'<meta property="og:url" content="{url_e}" />\n    '
+        f'<meta property="og:image" content="{img}" />\n    '
+        f'<meta property="og:image:width" content="1024" />\n    '
+        f'<meta property="og:image:height" content="1024" />\n    '
+        f'<meta property="og:image:alt" content="MindFold 3D logo" />\n    '
+        f'<meta property="og:site_name" content="MindFold 3D" />\n    '
+        f'<meta name="twitter:card" content="summary" />\n    '
+        f'<meta name="twitter:title" content="{t}" />\n    '
+        f'<meta name="twitter:description" content="{d}" />\n    '
+        f'<meta name="twitter:image" content="{img}" />'
+    )
+
+    html = html.replace("<!--OG_META-->", meta)
+    return HTMLResponse(content=html)
+
+
 @app.get("/")
-def serve_root():
-    return FileResponse("static/index.html")
+def serve_root(request: Request):
+    return _serve_html_with_meta(
+        "static/index.html", request,
+        title="MindFold 3D – Match the Shape",
+        description="Train your 3D spatial reasoning. Match, build, and "
+                    "rotate voxel shapes in this brain-training game.",
+    )
 
 @app.get("/home")
-def serve_home():
+def serve_home(request: Request):
     # Mode picker landing page. Auth gate is handled client-side in home.html
     # the same way it is in index.html (token check + redirect to auth.html).
-    return FileResponse("static/home.html")
+    return _serve_html_with_meta(
+        "static/home.html", request,
+        title="MindFold 3D – Spatial Cognition Trainer",
+        description="Pick your mode and start training your 3D spatial "
+                    "reasoning with MindFold 3D.",
+    )
 
 @app.get("/login")
-def serve_login():
-    return FileResponse("static/auth.html")
+def serve_login(request: Request):
+    return _serve_html_with_meta(
+        "static/auth.html", request,
+        title="MindFold 3D – Sign In",
+        description="Sign in or play as a guest to start training your 3D "
+                    "spatial reasoning.",
+    )
 
 @app.get("/license", response_class=Response)
 def serve_license():
@@ -551,19 +665,17 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
         print(f"Features received count: {features_count}")
         if isinstance(data.target_features, dict) and len(data.target_features) > 0:
             print(f"Sample feature keys: {list(data.target_features.keys())[:5]}")
-    
-    # Update session data
-    session_data["total_questions"] += 1
+
+    # Retrieve this user's isolated in-memory session state.
+    user_state = get_user_runtime_state(get_session_key(current_user))
+
+    # Update per-user session counters.
+    user_state["total_questions"] += 1
 
     is_correct = data.correct
 
     if is_correct:
-        session_data["correct_answers"] += 1
-
-    # Initialize feature stats if not present
-    if "feature_stats" not in session_data:
-        session_data["feature_stats"] = {}
-        print("Initialized empty feature_stats in session_data")
+        user_state["correct_answers"] += 1
 
     # Get database session
     db = next(get_db())
@@ -612,7 +724,7 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
-    session_data["attempts"].append(attempt_data)
+    user_state["attempts"].append(attempt_data)
 
     # Process target features if available
     print(f"Target features received: {data.target_features is not None}")
@@ -680,39 +792,51 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
 
             # Track features processed successfully
             processed_count = 0
-            
+
+            # Canonical feature names accepted from client submissions.  Only
+            # keys defined on ShapeFeatureSet are allowed; any unknown key is
+            # silently dropped to prevent injection of arbitrary feature names.
+            _valid_feature_fields = set(ShapeFeatureSet.model_fields.keys())
+
             # Process each feature
             for field, value in features_dict.items():
                 # Skip None values and grid_size tuples
                 if value is None or (field == "grid_size" and isinstance(value, tuple)):
                     continue
 
+                # Reject unknown feature keys sent by the client.
+                if field not in _valid_feature_fields:
+                    print(f"Rejecting unknown feature key from client: {field!r}")
+                    continue
+
+                # Only accept numeric or boolean values from the client.  String
+                # values could carry HTML/script payloads and are not produced by
+                # the server's own feature-measurement code for ShapeFeatureSet
+                # fields.
+                if not isinstance(value, (int, float, bool)):
+                    print(f"Rejecting non-numeric value for feature {field!r}: {type(value)}")
+                    continue
+
                 # Normalize value to string for dictionary keys
                 try:
-                    if isinstance(value, (list, tuple, dict)):
-                        value_key = str(value)
-                    elif isinstance(value, (int, float, str, bool)):
-                        value_key = str(value)
-                    else:
-                        print(f"Skipping non-serializable value: {field}={type(value)}")
-                        continue
+                    value_key = str(value)
                 except Exception as e:
                     print(f"Error serializing value for {field}: {str(e)}")
                     continue
 
                 try:
-                    # Update session stats
-                    if field not in session_data["feature_stats"]:
-                        session_data["feature_stats"][field] = {}
+                    # Update per-user session stats
+                    if field not in user_state["feature_stats"]:
+                        user_state["feature_stats"][field] = {}
 
-                    if value_key not in session_data["feature_stats"][field]:
-                        session_data["feature_stats"][field][value_key] = {
+                    if value_key not in user_state["feature_stats"][field]:
+                        user_state["feature_stats"][field][value_key] = {
                             "correct": 0,
                             "incorrect": 0,
                             "response_times": []
                         }
 
-                    session_stat = session_data["feature_stats"][field][value_key]
+                    session_stat = user_state["feature_stats"][field][value_key]
                     if is_correct:
                         session_stat["correct"] += 1
                         session_stat["response_times"].append(data.response_time)
@@ -762,7 +886,7 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
                     print(f"Error processing feature {field}: {str(e)}")
 
             print(f"Successfully processed {processed_count} features")
-            print(f"Updated feature stats. Session features: {len(session_data['feature_stats'])}, DB features: {len(user_stats.feature_stats)}")
+            print(f"Updated feature stats. Session features: {len(user_state['feature_stats'])}, DB features: {len(user_stats.feature_stats)}")
             print(f"Sample feature data in DB: {list(user_stats.feature_stats.keys())[:3] if user_stats.feature_stats else 'None'}")
 
             # More detailed diagnostic information
@@ -813,14 +937,15 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
 
             # Process through same feature_stats pipeline
             for field, value_key in interaction_features.items():
-                # Session stats
-                if field not in session_data["feature_stats"]:
-                    session_data["feature_stats"][field] = {}
-                if value_key not in session_data["feature_stats"][field]:
-                    session_data["feature_stats"][field][value_key] = {
+                # Per-user session stats (interaction features are server-generated,
+                # so no field-name or value-type validation is required here).
+                if field not in user_state["feature_stats"]:
+                    user_state["feature_stats"][field] = {}
+                if value_key not in user_state["feature_stats"][field]:
+                    user_state["feature_stats"][field][value_key] = {
                         "correct": 0, "incorrect": 0, "response_times": []
                     }
-                stat = session_data["feature_stats"][field][value_key]
+                stat = user_state["feature_stats"][field][value_key]
                 if is_correct:
                     stat["correct"] += 1
                     stat["response_times"].append(data.response_time)
@@ -928,20 +1053,29 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
 
     return {
         "status": "recorded",
-        "score": session_data["correct_answers"],
-        "total": session_data["total_questions"],
+        "score": user_state["correct_answers"],
+        "total": user_state["total_questions"],
         "features_processed": True
     }
 
 @app.get("/get-session-stats")
 def get_session_stats(current_user: models.User = Depends(auth.get_current_active_user)):
-    return session_data
+    user_state = get_user_runtime_state(get_session_key(current_user))
+    return {
+        "total_questions": user_state["total_questions"],
+        "correct_answers": user_state["correct_answers"],
+        "attempts": user_state["attempts"],
+        "feature_stats": user_state["feature_stats"],
+        "feature_errors": user_state["feature_errors"],
+    }
 
-def _compute_scorecard(user_id: int) -> dict:
+def _compute_scorecard(current_user) -> dict:
     """Compute scorecard data for a user. Reusable by both /scorecard and coaching endpoints."""
+    user_id = current_user.id
+    user_state = get_user_runtime_state(get_session_key(current_user))
     # Process session data
     session_full_stats = {}
-    session_feature_stats = session_data.get("feature_stats", {})
+    session_feature_stats = user_state.get("feature_stats", {})
 
     for feature in ShapeFeatureSet.model_fields:
         session_full_stats[feature] = {}
@@ -1014,8 +1148,8 @@ def _compute_scorecard(user_id: int) -> dict:
                 }
 
     # Calculate overall performance metrics
-    session_total = session_data["total_questions"]
-    session_correct = session_data["correct_answers"]
+    session_total = user_state["total_questions"]
+    session_correct = user_state["correct_answers"]
 
     persistent_total = user_stats.total_questions
     persistent_correct = user_stats.correct_answers
@@ -1055,7 +1189,7 @@ def _compute_scorecard(user_id: int) -> dict:
     # Overall average response time across all attempts in the current session.
     session_response_times = [
         a.get("response_time")
-        for a in session_data.get("attempts", [])
+        for a in user_state.get("attempts", [])
         if a.get("response_time") is not None
     ]
     session_avg_rt = (
@@ -1075,7 +1209,7 @@ def _compute_scorecard(user_id: int) -> dict:
     persistent_avg_rt = (persistent_rt_sum / persistent_rt_count) if persistent_rt_count > 0 else None
 
     # Add diagnostic information
-    print(f"Session data - Total questions: {session_total}, Features with data: {len(session_data.get('feature_stats', {}))}")
+    print(f"Session data - Total questions: {session_total}, Features with data: {len(user_state.get('feature_stats', {}))}")
     print(f"Database data - Total questions: {persistent_total}, Features with data: {len(persistent_feature_stats)}")
 
     if persistent_total > 0 and not persistent_feature_stats:
@@ -1085,7 +1219,7 @@ def _compute_scorecard(user_id: int) -> dict:
 
     # Compute per-task-variant breakdown from session attempts
     task_variant_stats = {}
-    for attempt in session_data.get("attempts", []):
+    for attempt in user_state.get("attempts", []):
         variant = attempt.get("task_variant", "simultaneous") or "simultaneous"
         mirror = attempt.get("mirror_mode", False)
         key = f"{variant}{'_mirror' if mirror else ''}"
@@ -1124,7 +1258,7 @@ def _compute_scorecard(user_id: int) -> dict:
 
     # Collect raw RT-by-angular-disparity data for Shepard & Metzler slope analysis
     rt_by_disparity = []
-    for attempt in session_data.get("attempts", []):
+    for attempt in user_state.get("attempts", []):
         idata = attempt.get("interaction_data")
         if idata and idata.get("angular_disparity") is not None:
             rt_by_disparity.append({
@@ -1135,7 +1269,7 @@ def _compute_scorecard(user_id: int) -> dict:
 
     # Collect recent raw attempts with full context for LLM cross-dimensional analysis
     recent_attempts_full = []
-    for attempt in session_data.get("attempts", [])[-15:]:
+    for attempt in user_state.get("attempts", [])[-15:]:
         entry = {
             "correct": attempt.get("correct"),
             "response_time": attempt.get("response_time"),
@@ -1164,8 +1298,8 @@ def _compute_scorecard(user_id: int) -> dict:
             "rt_by_angular_disparity": rt_by_disparity,
             "recent_attempts_full": recent_attempts_full,
             "debug_info": {
-                "features_count": len(session_data.get('feature_stats', {})),
-                "has_feature_data": bool(session_data.get('feature_stats'))
+                "features_count": len(user_state.get('feature_stats', {})),
+                "has_feature_data": bool(user_state.get('feature_stats'))
             }
         },
         "cumulative": {
@@ -1188,7 +1322,7 @@ def _compute_scorecard(user_id: int) -> dict:
 
 @app.get("/scorecard")
 def get_scorecard(current_user: models.User = Depends(auth.get_current_active_user)):
-    return _compute_scorecard(current_user.id)
+    return _compute_scorecard(current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -1221,8 +1355,9 @@ def coaching_feedback(
 
     start = _time.time()
 
-    total_q = session_data["total_questions"]
-    correct_q = session_data["correct_answers"]
+    user_state = get_user_runtime_state(get_session_key(current_user))
+    total_q = user_state["total_questions"]
+    correct_q = user_state["correct_answers"]
     accuracy = round(correct_q / max(1, total_q) * 100)
     session_summary = f"Session: {total_q} questions, {correct_q} correct ({accuracy}%)"
 
@@ -1230,7 +1365,7 @@ def coaching_feedback(
         was_correct=request.was_correct,
         response_time=request.response_time,
         target_features=request.target_features or {},
-        recent_attempts=session_data.get("attempts", [])[-10:],
+        recent_attempts=user_state.get("attempts", [])[-10:],
         session_stats_summary=session_summary,
         interaction_data=request.interaction_data,
     )
@@ -1248,7 +1383,7 @@ def coaching_feedback(
 
     # Fallback
     weak = []
-    fs = session_data.get("feature_stats", {})
+    fs = user_state.get("feature_stats", {})
     for feature, values in fs.items():
         for value, stats in values.items():
             total = stats.get("correct", 0) + stats.get("incorrect", 0)
@@ -1278,7 +1413,7 @@ def coaching_session_summary(
 
     start = _time.time()
 
-    scorecard = _compute_scorecard(current_user.id)
+    scorecard = _compute_scorecard(current_user)
     performance_summary = serialize_performance_for_llm(scorecard)
 
     prompt = build_session_summary_prompt(performance_summary)
@@ -1316,7 +1451,7 @@ def coaching_advice(
 
     start = _time.time()
 
-    scorecard = _compute_scorecard(current_user.id)
+    scorecard = _compute_scorecard(current_user)
     performance_summary = serialize_performance_for_llm(scorecard)
 
     # Build the on-demand advice prompt in both cases. When a user_question is
@@ -1362,7 +1497,7 @@ def coaching_scorecard_analysis(
 
     start = _time.time()
 
-    scorecard = _compute_scorecard(current_user.id)
+    scorecard = _compute_scorecard(current_user)
     performance_summary = serialize_performance_for_llm(scorecard)
 
     prompt = build_scorecard_analysis_prompt(performance_summary)
@@ -1387,21 +1522,13 @@ def coaching_scorecard_analysis(
 
 @app.post("/reset-session")
 def reset_session(current_user: models.User = Depends(auth.get_current_active_user)):
-    session_data["total_questions"] = 0
-    session_data["correct_answers"] = 0
-    session_data["attempts"] = []
-    session_data["feature_errors"] = {}
-    session_data["feature_stats"] = {}
+    session_data.get("per_user", {}).pop(get_session_key(current_user), None)
     return {"message": "Session reset successfully"}
 
 @app.post("/reset-all-data")
 def reset_all_data(current_user: models.User = Depends(auth.get_current_active_user)):
-    # Reset session data
-    session_data["total_questions"] = 0
-    session_data["correct_answers"] = 0
-    session_data["attempts"] = []
-    session_data["feature_errors"] = {}
-    session_data["feature_stats"] = {}
+    # Clear this user's in-memory session state.
+    session_data.get("per_user", {}).pop(get_session_key(current_user), None)
 
     # Reset database data
     db = next(get_db())
@@ -1473,8 +1600,9 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
                 print(f"Unknown feature_stats type: {type(user_stats.feature_stats)}")
                 db_feature_stats = {}
         
-        # 3. Get session feature stats
-        session_feature_stats = session_data.get("feature_stats", {})
+        # 3. Get this user's session feature stats
+        user_state = get_user_runtime_state(get_session_key(current_user))
+        session_feature_stats = user_state.get("feature_stats", {})
         print(f"Session feature_stats has {len(session_feature_stats)} features")
         
         # 4. Create dummy feature data if both sources are empty but we have questions
@@ -1566,8 +1694,8 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
             db.commit()
             print(f"Repaired and saved feature stats: {len(cleaned_stats)} features")
             
-            # Also update session data for consistency
-            session_data["feature_stats"] = cleaned_stats
+            # Also update this user's in-memory session stats for consistency
+            user_state["feature_stats"] = cleaned_stats
             
             result = {
                 "message": f"Data repair complete. Saved {len(cleaned_stats)} features with data.",
