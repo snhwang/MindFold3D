@@ -15,7 +15,17 @@ from database import get_db
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "The application cannot start without a secure signing secret."
+    )
+if len(SECRET_KEY) < 32:
+    raise RuntimeError(
+        "SECRET_KEY is too short. It must be at least 32 characters long. "
+        "Use a cryptographically random value (e.g., 'openssl rand -hex 32')."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours for a guest session
 
@@ -62,6 +72,10 @@ def get_current_user(token: str = Depends(oauth2_scheme),
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise credentials_exception
+    # Attach a stable session key derived from the user's PK so per-user
+    # in-memory state can never alias across concurrent users (or guests,
+    # since this build creates a fresh DB user per guest login).
+    user.session_key = str(user.id)
     return user
 
 

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>MindFold 3D – Home</title>
+  <!--OG_META-->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
@@ -206,6 +207,7 @@
       }
     }
     @media (max-width: 560px) {
+      header { padding: 14px 0; }
       header img.logo { max-height: 72px; }
       main { padding: 20px 14px 32px; }
       .welcome h1 { font-size: 1.3rem; }
@@ -220,6 +222,11 @@
         font-size: 1.7rem;
       }
       .user-button { font-size: 0.8rem; padding: 5px 10px; }
+    }
+
+    @media (max-width: 400px) {
+      .secondary-links { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+      .secondary-links a { margin: 0; }
     }
   </style>
 </head>
