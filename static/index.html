@@ -537,6 +537,11 @@
       /* Reset to absolute minimum styles */
     }
 
+    /* The MC settings gear button is hidden everywhere by default;
+       only the phone media query (max-width: 640px) below makes it
+       visible when body.mc-active is set. */
+    #mc-settings-toggle { display: none; }
+
     /* ──────────────────────────────────────────────────────────────
        Mobile / small-screen fit (2x2 MC grid)
        This block comes last intentionally so it supersedes the older
@@ -606,6 +611,121 @@
          was previously consuming ~170px of viewport on 640px-tall
          devices, leaving no room for the target shape. */
       #game-area > #reviewer-context { display: none !important; grid-row: auto !important; }
+
+      /* ────────────────────────────────────────────────────────────
+         Phone focused-MC layout (when body.mc-active).
+         The play area was being squeezed by the page header, the mode
+         navigation strip, the 'Match the Target Shape' h2, and a tall
+         controls strip with a Memory dropdown + 4 checkboxes that
+         clipped at both edges. While the user is actively answering
+         MC questions on a phone we hide all secondary chrome and
+         tuck advanced settings behind a gear button.
+         ──────────────────────────────────────────────────────────── */
+      body.mc-active header { display: none !important; }
+      body.mc-active .mode-navigation { display: none !important; }
+      body.mc-active #game-area h2 { display: none !important; }
+      /* The standalone red logout button is anchored top-right relative
+         to the page; with header hidden it would float in the middle of
+         the play area. Hide it on phones in MC mode (the user can sign
+         out from the settings panel - see #mc-home-link below). */
+      body.mc-active #logout-standalone { display: none !important; }
+
+      /* Difficulty + Streak inline on a single compact line. */
+      body.mc-active #difficulty-info,
+      body.mc-active .streak-info {
+        display: inline-block;
+        font-size: 0.78rem !important;
+        margin: 0 6px !important;
+        opacity: 0.85;
+      }
+      /* Center the inline pair. */
+      body.mc-active .controls-container > #difficulty-info { margin-left: 0 !important; }
+      body.mc-active .controls-container > #difficulty-info::before {
+        content: '';
+        display: block;
+        text-align: center;
+      }
+      body.mc-active .controls-container > #difficulty-info,
+      body.mc-active .controls-container > .streak-info {
+        text-align: center;
+        width: auto;
+      }
+      /* Wrap them in a single centered row by neutralizing block-flow. */
+      body.mc-active .controls-container {
+        text-align: center;
+      }
+
+      /* Hide advanced task-settings panel by default; show when
+         body.mc-settings-open is set. Stack vertically when shown
+         so checkboxes never clip past the edge. */
+      body.mc-active #task-settings {
+        display: none !important;
+      }
+      body.mc-active.mc-settings-open #task-settings {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+        margin: 4px 0 !important;
+        padding: 8px 12px !important;
+      }
+      body.mc-active.mc-settings-open #task-settings label {
+        margin: 0 !important;
+        font-size: 0.85rem !important;
+      }
+      body.mc-active.mc-settings-open #task-settings select {
+        width: 100%;
+      }
+
+      /* Quick Home / Logout links inside the expanded settings panel
+         on phones, so the user has a way out of focused MC mode
+         without us giving up vertical space to a full header. */
+      body.mc-active.mc-settings-open #task-settings #mc-quick-links {
+        display: flex !important;
+        gap: 8px;
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid #d8e0e8;
+        width: 100%;
+      }
+      body.mc-active.mc-settings-open #task-settings #mc-quick-links a {
+        flex: 1;
+        text-align: center;
+        padding: 6px 10px;
+        background: #fff;
+        border: 1px solid #c0c8d0;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        text-decoration: none;
+        color: #333;
+      }
+      #mc-quick-links { display: none; }
+
+      /* Gear (settings) toggle button - only visible on phones in MC.
+         The base rule below the @media block hides it everywhere by
+         default; this rule only fires inside the (max-width: 640px)
+         media query so it's phone-only. */
+      body.mc-active #mc-settings-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        margin-right: 6px;
+        border-radius: 50%;
+        border: 1px solid #c0c8d0;
+        background: #f0f4f8;
+        color: #555;
+        font-size: 1rem;
+        cursor: pointer;
+        vertical-align: middle;
+      }
+      body.mc-active.mc-settings-open #mc-settings-toggle {
+        background: #007acc;
+        color: white;
+        border-color: #007acc;
+      }
     }
 
     /* Landscape phones / short viewports: collapse header + mode nav
@@ -848,9 +968,20 @@
             title="Expert mode: 15-25 voxels in 10×10×10 grid with high topological complexity">
             <input type="checkbox" id="expert-mode" /> Expert
           </label>
+          <!-- Quick links shown only inside the phone settings panel
+               (CSS rule body.mc-active.mc-settings-open). On desktop /
+               tablet this stays hidden (#mc-quick-links { display: none }). -->
+          <div id="mc-quick-links">
+            <a href="/">Home</a>
+            <a href="#" onclick="event.preventDefault(); window.handleStandaloneLogout && window.handleStandaloneLogout();">Sign out</a>
+          </div>
         </div>
 
-        <div style="display: flex; justify-content: center; gap: 0.5rem;">
+        <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+          <button id="mc-settings-toggle" type="button" onclick="window.toggleMcSettings()"
+            aria-label="Settings" title="Settings">
+            <i class="fas fa-cog"></i>
+          </button>
           <button id="stop-btn" onclick="endSession()">Stop Test</button>
           <button id="restart-btn" onclick="restartSession()">Restart</button>
           <button id="reset-all-button" style="background-color: #ff5555; color: white; display: none;">Reset All
@@ -2417,6 +2548,10 @@
           builderArea.style.display = 'block';
         }
 
+        // Builder mode wants header + mode-nav visible; clear the focused
+        // MC body classes so they're never lingering.
+        document.body.classList.remove('mc-active', 'mc-settings-open');
+
         // Update button styles
         const recognitionBtn = document.getElementById('recognition-mode-btn');
         const builderBtn = document.getElementById('builder-mode-btn');
@@ -2471,11 +2606,23 @@
       }
     };
 
+    /* Toggle the inline advanced-settings panel on phones. The CSS
+       at @media (max-width: 640px) hides #task-settings when
+       body.mc-active is set unless body.mc-settings-open is also set. */
+    window.toggleMcSettings = function () {
+      document.body.classList.toggle('mc-settings-open');
+    };
+
     window.switchToRecognitionMode = function () {
       document.getElementById('builder-area').style.display = 'none';
       // game-area uses CSS grid for fit-to-viewport layout - 'block' here
       // would override the grid template and collapse the target row.
       document.getElementById('game-area').style.display = 'grid';
+      // Mark body so the phone CSS can hide secondary chrome (header,
+      // mode-nav, h2) and tuck advanced settings behind a gear button.
+      document.body.classList.add('mc-active');
+      // Settings panel starts collapsed every time we re-enter MC mode.
+      document.body.classList.remove('mc-settings-open');
 
       // Update button styles
       document.getElementById('builder-mode-btn').style.background = '#888';
