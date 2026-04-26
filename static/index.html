@@ -953,17 +953,82 @@
     #coaching-panel.coaching-modal #coaching-next-btn { display: block; }
     #coaching-next-btn:hover { background: #5848d6; }
 
-    /* ── Builder mode: responsive viewers ──
-       The inline style sets width/height to 250px; on phones that is fine
-       (250 < 440) but on very narrow screens or in landscape it can clip.
-       Use min() so the viewer never exceeds 250px and never exceeds 90vw. */
-    @media (max-width: 640px) {
+    /* ── Builder mode: responsive viewers (portrait phones) ──
+       The inline style sets viewer width/height to 250px. On phones
+       narrower than 640 we cap at 90vw so the canvas doesn't clip. */
+    @media (max-width: 640px) and (orientation: portrait) {
       #builder-area #builder-target,
       #builder-area #builder-workspace {
         width: min(250px, 90vw) !important;
         height: min(250px, 90vw) !important;
       }
       #builder-area > div > div { align-items: center !important; }
+    }
+
+    /* ── Builder mode: scrollable body ──
+       Body is normally `position: fixed; overflow: hidden` (required by
+       MC mode). Builder needs ~700px which doesn't fit on iPhone SE
+       (667) or any phone in landscape. Releasing the body restores
+       normal page scrolling so portrait users can reach the buttons. */
+    body.builder-active {
+      position: static;
+      height: auto;
+      min-height: 100%;
+      overflow: visible;
+      overflow-y: auto;
+    }
+    body.builder-active #builder-area {
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+    body.builder-active #builder-area > div > div:last-child {
+      margin-bottom: 16px !important;
+    }
+
+    /* ── Portrait-only on phones ──
+       The MC fit-to-viewport layout and the Builder column layout are
+       both designed for portrait phones. Landscape on a phone-sized
+       screen reliably clips controls (the Builder action button row
+       falls below the fold; MC settings squeeze together). Rather than
+       fight this with mode-specific landscape CSS, show a friendly
+       overlay asking the user to rotate. Tablets and desktops are
+       unaffected (gated on max-width: 900px). */
+    #portrait-lock-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #f4f6f8;
+      color: #2a3b4d;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 1rem;
+    }
+    #portrait-lock-overlay .icon {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; color: #007acc;
+      animation: rotate-hint 2.5s ease-in-out infinite;
+    }
+    #portrait-lock-overlay h2 {
+      margin: 0; font-size: 1.25rem; color: #2a3b4d;
+    }
+    #portrait-lock-overlay p {
+      margin: 0; font-size: 0.95rem; color: #5a6a7d; max-width: 320px;
+    }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(-90deg); }
+      50% { transform: rotate(0deg); }
+    }
+    @media (max-width: 900px) and (orientation: landscape) {
+      #portrait-lock-overlay { display: flex; }
+      /* Hide everything else so the overlay is the only thing the user
+         sees (and we don't pay the cost of laying out a broken UI
+         underneath). */
+      body > *:not(#portrait-lock-overlay) { visibility: hidden; }
     }
 
     /* ── Task settings bar: allow wrapping on narrow screens ──
@@ -977,6 +1042,19 @@
 </head>
 
 <body>
+  <!-- Portrait-only overlay: shown on phone-sized landscape viewports.
+       Pure CSS handles visibility via the @media rule above; we don't
+       need any JS to toggle this. -->
+  <div id="portrait-lock-overlay" role="dialog" aria-modal="true" aria-label="Rotate your device">
+    <div class="icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="7" y="2" width="10" height="20" rx="2" ry="2"/>
+        <line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+    </div>
+    <h2>Please rotate your device</h2>
+    <p>MindFold 3D is designed for portrait orientation on phones. Rotate your device upright to continue.</p>
+  </div>
   <header>
     <div class="user-menu">
       <button id="user-button" class="user-button">User</button>
@@ -2809,6 +2887,10 @@
         // Builder mode wants header + mode-nav visible; clear the focused
         // MC body classes so they're never lingering.
         document.body.classList.remove('mc-active', 'mc-settings-open');
+        // Builder is taller than the viewport on short phones; let body
+        // scroll so the action buttons are reachable. See the
+        // `body.builder-active` rule in the stylesheet for details.
+        document.body.classList.add('builder-active');
 
         // Update button styles
         const recognitionBtn = document.getElementById('recognition-mode-btn');
@@ -2881,6 +2963,9 @@
       document.body.classList.add('mc-active');
       // Settings panel starts collapsed every time we re-enter MC mode.
       document.body.classList.remove('mc-settings-open');
+      // Drop the builder scroll override — MC mode needs the fixed,
+      // unscrolled body for its fit-to-viewport layout.
+      document.body.classList.remove('builder-active');
 
       // Update button styles
       document.getElementById('builder-mode-btn').style.background = '#888';

@@ -228,9 +228,59 @@
       .secondary-links { display: flex; flex-direction: column; gap: 4px; align-items: center; }
       .secondary-links a { margin: 0; }
     }
+
+    /* ── Portrait-only on phones ──
+       Phone landscape clips controls in the app. Show a friendly overlay
+       asking the user to rotate. Tablets/desktops unaffected. */
+    #portrait-lock-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #f4f6f8;
+      color: #2a3b4d;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 1rem;
+    }
+    #portrait-lock-overlay .icon {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; color: #007acc;
+      animation: rotate-hint 2.5s ease-in-out infinite;
+    }
+    #portrait-lock-overlay h2 {
+      margin: 0; font-size: 1.25rem; color: #2a3b4d;
+    }
+    #portrait-lock-overlay p {
+      margin: 0; font-size: 0.95rem; color: #5a6a7d; max-width: 320px;
+    }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(-90deg); }
+      50% { transform: rotate(0deg); }
+    }
+    @media (max-width: 900px) and (orientation: landscape) {
+      #portrait-lock-overlay { display: flex; }
+      body > *:not(#portrait-lock-overlay) { visibility: hidden; }
+    }
   </style>
 </head>
 <body>
+  <!-- Portrait-only overlay: shown on phone-sized landscape viewports. -->
+  <div id="portrait-lock-overlay" role="dialog" aria-modal="true" aria-label="Rotate your device">
+    <div class="icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="7" y="2" width="10" height="20" rx="2" ry="2"/>
+        <line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+    </div>
+    <h2>Please rotate your device</h2>
+    <p>MindFold 3D is designed for portrait orientation on phones. Rotate your device upright to continue.</p>
+  </div>
   <header>
     <div class="user-menu">
       <button id="user-button" class="user-button" aria-haspopup="true" aria-expanded="false">
