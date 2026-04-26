@@ -117,30 +117,33 @@
       padding: 0.5rem 1rem;
     }
 
-    /* Game area grid. Rows are explicitly named so children can be
-       placed by name regardless of source order. This is critical:
-       #game-area contains an auto-sized reviewer-context banner as
-       its first child, plus h2 / target / choices / controls. Without
-       explicit grid-row assignments, the banner pushed every other
-       child down by one row and the target ended up in the choices
-       row (and got covered by the choices grid). */
+    /* Game area grid. Five rows for five children:
+         row 1  reviewer-context banner   auto
+         row 2  h2 heading                auto
+         row 3  target shape              minmax(0, 1fr)
+         row 4  choices grid              minmax(0, 2fr)
+         row 5  controls strip            auto
+       Children are pinned to numeric rows (not named lines) for
+       cross-browser parsing parity - WebKit / iOS Safari has
+       historically been finicky with named-line grid-template-rows
+       declarations. Numeric rows behave identically everywhere. */
     #game-area {
       flex: 1 1 auto;
       display: grid;
-      grid-template-rows: [banner] auto [heading] auto [target] minmax(0, 1fr) [choices] minmax(0, 2fr) [controls] auto [end];
+      grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 2fr) auto;
       grid-template-columns: 1fr;
       gap: clamp(4px, 0.6vh, 10px);
       min-height: 0;
       overflow: hidden;
     }
 
-    /* Pin each game-area child to its named row so the grid layout
-       is deterministic regardless of source order. */
-    #game-area > #reviewer-context { grid-row: banner / heading; }
-    #game-area > h2 { grid-row: heading / target; }
-    #game-area > .target-container { grid-row: target / choices; }
-    #game-area > .choices-container { grid-row: choices / controls; }
-    #game-area > .controls-container { grid-row: controls / end; }
+    /* Pin each game-area child to its row so layout is deterministic
+       regardless of source order. */
+    #game-area > #reviewer-context  { grid-row: 1 / 2; }
+    #game-area > h2                 { grid-row: 2 / 3; }
+    #game-area > .target-container  { grid-row: 3 / 4; }
+    #game-area > .choices-container { grid-row: 4 / 5; }
+    #game-area > .controls-container{ grid-row: 5 / 6; }
 
     #game-area h2 {
       margin: 0 0 0.1rem 0;
@@ -2470,7 +2473,9 @@
 
     window.switchToRecognitionMode = function () {
       document.getElementById('builder-area').style.display = 'none';
-      document.getElementById('game-area').style.display = 'block';
+      // game-area uses CSS grid for fit-to-viewport layout - 'block' here
+      // would override the grid template and collapse the target row.
+      document.getElementById('game-area').style.display = 'grid';
 
       // Update button styles
       document.getElementById('builder-mode-btn').style.background = '#888';
