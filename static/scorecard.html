@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MindFold 3D – Performance Scorecard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f7;
+      overscroll-behavior: none;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      padding: 0.5rem 0;
+      background: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 80px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .logo-container {
+      display: flex;
+      align-items: center;
+      margin: 0 auto;
+    }
+    header img {
+      max-height: 70px;
+      width: auto;
+      margin-right: 0.5rem;
+    }
+    .back-button {
+      margin-left: 15px;
+      background: #f0f0f0;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+    }
+    .back-button i {
+      margin-right: 5px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .scorecard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .scorecard-header h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .scorecard-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .reset-all-link {
+      background: none;
+      border: none;
+      color: #99a;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 6px 4px;
+      text-decoration: underline;
+    }
+    .reset-all-link:hover { color: #555; }
+    .summary-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 900px) {
+      .summary-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .stat-card {
+      background: white;
+      border-radius: 10px;
+      padding: 15px 20px;
+      min-width: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      text-align: center;
+    }
+    .stat-card h3 {
+      margin: 0;
+      font-size: 13px;
+      color: #666;
+      letter-spacing: 0.4px;
+    }
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 10px 0 6px;
+      color: #007acc;
+      line-height: 1;
+    }
+    .stat-card .value.muted { color: #888; font-size: 26px; }
+    .stat-card .subtext {
+      font-size: 12px;
+      color: #888;
+    }
+    .stat-card .verdict-pill {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .verdict-pill.strong   { background: #e6f6ec; color: #1f7a3a; }
+    .verdict-pill.good     { background: #eaf3ff; color: #1f5fb0; }
+    .verdict-pill.building { background: #fff5e1; color: #8a5a00; }
+    .verdict-pill.practice { background: #fde9e1; color: #a14315; }
+    .verdict-pill.unknown  { background: #f0f0f0; color: #666; }
+
+    /* At-a-glance summary banner under the cards */
+    .summary-banner {
+      background: linear-gradient(135deg, #f5fbff 0%, #fdf7ff 100%);
+      border: 1px solid #e3e7ef;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: #2c3e50;
+    }
+    .summary-banner strong { color: #1c2a3a; }
+    .summary-banner .pos { color: #1f7a3a; font-weight: 600; }
+    .summary-banner .neg { color: #a14315; font-weight: 600; }
+    .summary-banner.empty { color: #6b7682; font-style: normal; }
+
+    /* Strengths + improvements side-by-side panels */
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 720px) {
+      .insights-grid { grid-template-columns: 1fr; }
+    }
+    .insight-panel {
+      background: white;
+      border-radius: 10px;
+      padding: 16px 18px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      border-left: 4px solid #cdd3dc;
+    }
+    .insight-panel.strengths { border-left-color: #2e8b57; }
+    .insight-panel.improvements { border-left-color: #d8841d; }
+    .insight-panel h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .insight-panel.strengths h3 { color: #1f7a3a; }
+    .insight-panel.improvements h3 { color: #8a5210; }
+    .insight-panel ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .insight-panel li {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px solid #f0f0f0;
+      gap: 12px;
+    }
+    .insight-panel li:last-child { border-bottom: none; }
+    .insight-panel .label { color: #2c3e50; }
+    .insight-panel .label .feature-name { color: #6b7682; font-size: 12px; margin-left: 4px; }
+    .insight-panel .pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .insight-panel.strengths .pct { color: #1f7a3a; }
+    .insight-panel.improvements .pct { color: #8a5210; }
+    .insight-panel .attempts { color: #99a; font-size: 11px; margin-left: 6px; font-weight: 400; }
+    .insight-panel .empty-msg { color: #99a; font-size: 13px; font-style: normal; margin: 4px 0; }
+    .features-heatmap {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 30px;
+    }
+
+    /* ---- Per-feature heatmap track layout ----
+     * Each feature gets its own row: label on the left, then a wrapping flex
+     * row of value chips coloured by accuracy. This replaces the previous
+     * single-axis D3 heatmap, where values from different features stacked
+     * on a shared Y axis and labels collided. */
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: minmax(140px, max-content) 1fr;
+      gap: 10px 18px;
+      align-items: start;
+      margin-top: 12px;
+    }
+    .heatmap-grid .feature-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2c3e50;
+      padding-top: 6px;
+      white-space: nowrap;
+    }
+    .heatmap-grid .feature-label .feature-meta {
+      display: block;
+      font-size: 11px;
+      font-weight: 400;
+      color: #99a;
+      margin-top: 2px;
+    }
+    .heatmap-grid .value-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .value-chip {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.06);
+      font-size: 12px;
+      line-height: 1.2;
+      cursor: default;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .value-chip:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+    .value-chip .chip-value {
+      font-weight: 600;
+      color: #2c3e50;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .value-chip .chip-pct {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .value-chip[data-tier="strong"]    { background: #cfe6dd; }
+    .value-chip[data-tier="good"]      { background: #dfeaf7; }
+    .value-chip[data-tier="average"]   { background: #f1f1f1; }
+    .value-chip[data-tier="weak"]      { background: #fbe1d2; }
+    .value-chip[data-tier="very-weak"] { background: #f6c9c0; }
+    .value-chip[data-tier="strong"]    .chip-pct { color: #1f7a3a; }
+    .value-chip[data-tier="good"]      .chip-pct { color: #1f5fb0; }
+    .value-chip[data-tier="average"]   .chip-pct { color: #555; }
+    .value-chip[data-tier="weak"]      .chip-pct { color: #a14315; }
+    .value-chip[data-tier="very-weak"] .chip-pct { color: #8b0e0e; }
+    @media (max-width: 600px) {
+      .heatmap-grid {
+        grid-template-columns: 1fr;
+        gap: 4px 0;
+      }
+      .heatmap-grid .feature-label {
+        padding-top: 6px;
+        margin-bottom: -2px;
+      }
+      .heatmap-grid .value-row {
+        margin-bottom: 8px;
+      }
+      .value-chip { min-width: 0; flex: 1 1 auto; }
+    }
+    .feature-details {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .heatmap-container {
+      margin-top: 15px;
+    }
+    .heatmap-legend {
+      display: flex;
+      justify-content: center;
+      margin-top: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      color: #555;
+    }
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      margin-right: 6px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+    .feature-selector {
+      margin: 15px 0;
+      width: 100%;
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+    #feature-chart-container {
+      height: 300px;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 200px;
+      font-size: 18px;
+      color: #666;
+    }
+    .highlight-weak {
+      background-color: #fff8ec;
+      border-left: 3px solid #d8841d;
+      padding: 12px;
+      margin-top: 20px;
+      border-radius: 0 5px 5px 0;
+    }
+    .highlight-weak h3 {
+      margin-top: 0;
+      color: #8a5210;
+    }
+    .highlight-weak ul {
+      margin-bottom: 0;
+      padding-left: 20px;
+    }
+    .highlight-weak li {
+      margin: 5px 0;
+    }
+    .tooltip {
+      position: absolute;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 12px;
+      z-index: 1000;
+    }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    .tab-button {
+      background: #f0f0f0;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px 5px 0 0;
+      margin-right: 5px;
+      border: 1px solid #ddd;
+      border-bottom: none;
+    }
+    .tab-button.active {
+      background: #fff;
+      font-weight: bold;
+      border-bottom: 2px solid white;
+      margin-bottom: -1px;
+    }
+    .tab-content {
+      display: block;
+    }
+    .coaching-section {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-top: 30px;
+    }
+    .coaching-section h2 i {
+      color: #6c5ce7;
+      margin-right: 8px;
+    }
+    .coaching-status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .coaching-status-badge.online {
+      background: #d4edda;
+      color: #155724;
+    }
+    .coaching-status-badge.offline {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .coach-analyze-btn {
+      background: #6c5ce7;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .coach-analyze-btn:hover {
+      background: #5a4bd1;
+    }
+    .coach-analyze-btn:disabled {
+      background: #b8b0e8;
+      cursor: not-allowed;
+    }
+    .coaching-content {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f8f7ff;
+      border-left: 4px solid #6c5ce7;
+      border-radius: 0 8px 8px 0;
+      line-height: 1.6;
+      display: none;
+    }
+    .coaching-content.visible {
+      display: block;
+    }
+    .coaching-spinner {
+      display: none;
+      margin-top: 15px;
+      text-align: center;
+      color: #6c5ce7;
+      font-size: 14px;
+    }
+    .coaching-spinner.visible {
+      display: block;
+    }
+    .coaching-spinner i {
+      margin-right: 8px;
+    }
+    .coaching-fallback {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
+    }
+    @media (max-width: 560px) {
+      .summary-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .container {
+        padding: 15px;
+      }
+      .tabs {
+        flex-direction: column;
+        border-bottom: none;
+      }
+      .tab-button {
+        border-radius: 5px;
+        margin-bottom: 5px;
+        border: 1px solid #ddd;
+      }
+      .tab-button.active {
+        border-bottom: 1px solid #ddd;
+        margin-bottom: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="back-button" onclick="window.location.href='/static/index.html'">
+      <i class="fas fa-arrow-left"></i> Back to Game
+    </button>
+
+    <div class="logo-container">
+      <img src="/static/logo.png" alt="MindFold 3D Logo" />
+    </div>
+
+    <div style="width: 100px;"></div> <!-- Spacer for balance -->
+  </header>
+
+  <div class="container">
+    <div class="scorecard-header">
+      <h1>Performance Scorecard</h1>
+      <div class="scorecard-actions">
+        <button onclick="loadScorecard()" class="back-button" title="Reload latest data">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+        <button onclick="resetSessionStats()" class="back-button" title="Clear current session stats only">
+          <i class="fas fa-redo-alt"></i> Reset Session
+        </button>
+        <button type="button" onclick="resetAllStats()" class="reset-all-link" title="Permanently delete all cumulative data">
+          Reset all data
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button id="session-tab" class="tab-button active" onclick="switchTab('session')">Current Session</button>
+      <button id="cumulative-tab" class="tab-button" onclick="switchTab('cumulative')">Cumulative Data</button>
+    </div>
+
+    <div id="session-content" class="tab-content">
+      <div class="summary-stats">
+        <div class="stat-card">
+          <h3>ACCURACY</h3>
+          <div id="session-accuracy-value" class="value">--%</div>
+          <span id="session-accuracy-pill" class="verdict-pill unknown">no data</span>
+        </div>
+        <div class="stat-card">
+          <h3>QUESTIONS ANSWERED</h3>
+          <div id="session-total-value" class="value">--</div>
+          <div class="subtext">This session</div>
+        </div>
+        <div class="stat-card">
+          <h3>CORRECT · INCORRECT</h3>
+          <div id="session-split-value" class="value muted">–</div>
+          <div class="subtext">Right vs. wrong</div>
+        </div>
+        <div class="stat-card">
+          <h3>AVG RESPONSE TIME</h3>
+          <div id="session-rt-value" class="value muted">–</div>
+          <div class="subtext">Per question</div>
+        </div>
+      </div>
+
+      <div id="session-summary-banner" class="summary-banner empty">
+        Answer a few more questions to see a personalized summary.
+      </div>
+
+      <div class="insights-grid">
+        <div class="insight-panel strengths">
+          <h3><i class="fas fa-star"></i> Strengths</h3>
+          <ul id="session-strengths-list"></ul>
+          <div id="session-strengths-empty" class="empty-msg">No clear strengths yet — keep playing to build a profile.</div>
+        </div>
+        <div class="insight-panel improvements">
+          <h3><i class="fas fa-bullseye"></i> Areas to Improve</h3>
+          <ul id="session-weak-list"></ul>
+          <div id="session-weak-empty" class="empty-msg">Nothing flagged yet. Keep going to surface trouble spots.</div>
+        </div>
+      </div>
+
+      <div class="features-heatmap">
+        <h2>Session Performance by Feature</h2>
+        <p>Each feature shows your accuracy across the values you encountered. Hover a chip for the count of attempts.</p>
+
+        <div class="heatmap-container">
+          <div id="session-heatmap-loading" class="loading">Loading performance data...</div>
+          <div id="session-heatmap"></div>
+        </div>
+
+        <div class="heatmap-legend">
+          <div class="legend-item"><div class="legend-color" style="background:#cfe6dd;"></div><span>Strong (85-100%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#dfeaf7;"></div><span>On track (70-85%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#f1f1f1;"></div><span>Building (50-70%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#fbe1d2;"></div><span>Practice (30-50%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#f6c9c0;"></div><span>Needs work (0-30%)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cumulative-content" class="tab-content" style="display: none;">
+      <div class="summary-stats">
+        <div class="stat-card">
+          <h3>ACCURACY</h3>
+          <div id="cumulative-accuracy-value" class="value">--%</div>
+          <span id="cumulative-accuracy-pill" class="verdict-pill unknown">no data</span>
+        </div>
+        <div class="stat-card">
+          <h3>QUESTIONS ANSWERED</h3>
+          <div id="cumulative-total-value" class="value">--</div>
+          <div class="subtext">All sessions</div>
+        </div>
+        <div class="stat-card">
+          <h3>CORRECT · INCORRECT</h3>
+          <div id="cumulative-split-value" class="value muted">–</div>
+          <div class="subtext">Right vs. wrong</div>
+        </div>
+        <div class="stat-card">
+          <h3>AVG RESPONSE TIME</h3>
+          <div id="cumulative-rt-value" class="value muted">–</div>
+          <div class="subtext">Per question</div>
+        </div>
+      </div>
+
+      <div id="cumulative-summary-banner" class="summary-banner empty">
+        Play a few sessions to build a personalized cumulative summary.
+      </div>
+
+      <div class="insights-grid">
+        <div class="insight-panel strengths">
+          <h3><i class="fas fa-star"></i> Strengths</h3>
+          <ul id="cumulative-strengths-list"></ul>
+          <div id="cumulative-strengths-empty" class="empty-msg">No clear strengths yet — keep playing to build a profile.</div>
+        </div>
+        <div class="insight-panel improvements">
+          <h3><i class="fas fa-bullseye"></i> Areas to Improve</h3>
+          <ul id="cumulative-weak-list"></ul>
+          <div id="cumulative-weak-empty" class="empty-msg">Nothing flagged yet. Keep going to surface trouble spots.</div>
+        </div>
+      </div>
+
+      <div class="features-heatmap">
+        <h2>Cumulative Performance by Feature</h2>
+        <p>Each feature shows your accuracy across all sessions. Hover a chip for the count of attempts.</p>
+
+        <div class="heatmap-container">
+          <div id="cumulative-heatmap-loading" class="loading">Loading performance data...</div>
+          <div id="cumulative-heatmap"></div>
+        </div>
+
+        <div class="heatmap-legend">
+          <div class="legend-item"><div class="legend-color" style="background:#cfe6dd;"></div><span>Strong (85-100%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#dfeaf7;"></div><span>On track (70-85%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#f1f1f1;"></div><span>Building (50-70%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#fbe1d2;"></div><span>Practice (30-50%)</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#f6c9c0;"></div><span>Needs work (0-30%)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-details">
+      <h2>Feature Detail Analysis</h2>
+      <select id="feature-selector" class="feature-selector">
+        <option value="">Select a feature to analyze...</option>
+      </select>
+
+      <div id="feature-chart-container">
+        <canvas id="feature-chart"></canvas>
+      </div>
+
+      <!-- Per-feature weak-areas callout (legacy in-detail view, kept for the dropdown context). -->
+      <div id="weak-areas-container" class="highlight-weak" style="display: none;">
+        <h3>Focus areas in this feature</h3>
+        <p>Based on your performance in the selected feature:</p>
+        <ul id="weak-areas-list"></ul>
+      </div>
+      
+      <!-- Debug panel hidden by default for production; add ?debug=1 to URL to enable. -->
+      <div id="debug-panel" style="display: none; margin-top: 30px; padding: 15px; background: #f8f8f8; border: 1px solid #ddd; border-radius: 5px;">
+        <h3 style="margin-top: 0;">Debug Information</h3>
+        <p>This panel shows technical information about the data being loaded:</p>
+        <div id="debug-info"></div>
+        <div style="margin-top: 15px; display: flex; gap: 10px;">
+          <button id="manual-repair-btn" style="background: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+            Attempt Data Repair
+          </button>
+          <button onclick="refreshWithFix()" style="background: #4caf50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+            Refresh with Reconnection
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Cognitive Coach Section -->
+    <div class="coaching-section">
+      <h2><i class="fas fa-brain"></i>AI Cognitive Coach <span id="coaching-status-badge" class="coaching-status-badge offline">checking...</span></h2>
+      <p>Get a personalized cognitive analysis of your performance patterns, mapped to the nine-skill spatial reasoning taxonomy.</p>
+      <button id="coaching-analyze-btn" class="coach-analyze-btn" onclick="getCoachingAnalysis()" disabled>
+        <i class="fas fa-magic"></i> Get AI Analysis
+      </button>
+      <div id="coaching-spinner" class="coaching-spinner">
+        <i class="fas fa-spinner fa-spin"></i> Analyzing your cognitive profile...
+      </div>
+      <div id="coaching-content" class="coaching-content"></div>
+    </div>
+  </div>
+
+  <script>
+    let sessionScoreData = null;
+    let cumulativeScoreData = null;
+    let sessionFeatureScorecard = null;
+    let cumulativeFeatureScorecard = null;
+    let currentFeatureChart = null;
+    let currentDataMode = 'session'; // 'session' or 'cumulative'
+
+    // Check authentication and redirect if not logged in
+    function checkAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/static/auth.html';
+        return false;
+      }
+      return true;
+    }
+
+    // Switch between session and cumulative tabs
+    function switchTab(mode) {
+      currentDataMode = mode;
+
+      // Update tab buttons
+      document.getElementById('session-tab').classList.toggle('active', mode === 'session');
+      document.getElementById('cumulative-tab').classList.toggle('active', mode === 'cumulative');
+
+      // Show/hide content
+      document.getElementById('session-content').style.display = mode === 'session' ? 'block' : 'none';
+      document.getElementById('cumulative-content').style.display = mode === 'cumulative' ? 'block' : 'none';
+
+      // Update feature selector based on current mode
+      const featureScorecard = mode === 'session' ? sessionFeatureScorecard : cumulativeFeatureScorecard;
+      populateFeatureSelector(featureScorecard);
+
+      // Hide the per-feature focus-areas callout until the user picks a feature.
+      const wac = document.getElementById('weak-areas-container');
+      if (wac) wac.style.display = 'none';
+
+      // Clear any existing feature chart
+      if (currentFeatureChart) {
+        currentFeatureChart.destroy();
+        currentFeatureChart = null;
+      }
+
+      console.log(`Switched to ${mode} mode. Data available:`, mode === 'session' ? sessionFeatureScorecard : cumulativeFeatureScorecard);
+    }
+
+    async function loadScorecard() {
+      if (!checkAuth()) return;
+
+      try {
+        writeDebug('text', "Loading scorecard data...");
+        
+        const token = localStorage.getItem('token');
+        const response = await fetch('/scorecard', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Full scorecard data:", data);
+
+        // Store both sets of data
+        sessionScoreData = data.session;
+        cumulativeScoreData = data.cumulative;
+
+        // Render the new card layout + verdict banner + strengths/weaknesses panels
+        // for both tabs.
+        const sessionTotal = sessionScoreData.total_questions || 0;
+        const cumulativeTotal = cumulativeScoreData.total_questions || 0;
+        renderSummaryCards('session', sessionScoreData);
+        renderSummaryCards('cumulative', cumulativeScoreData);
+        renderSummaryBanner('session', sessionScoreData);
+        renderSummaryBanner('cumulative', cumulativeScoreData);
+        renderInsightPanel('session-strengths', sessionScoreData.strong_areas, 'strengths');
+        renderInsightPanel('session-weak', sessionScoreData.weak_areas, 'weak');
+        renderInsightPanel('cumulative-strengths', cumulativeScoreData.strong_areas, 'strengths');
+        renderInsightPanel('cumulative-weak', cumulativeScoreData.weak_areas, 'weak');
+
+        // Process feature scorecard data
+        sessionFeatureScorecard = sessionScoreData.feature_scorecard || {};
+        cumulativeFeatureScorecard = cumulativeScoreData.feature_scorecard || {};
+
+        // Database persistence check: only treat as a real issue when there are
+        // enough cumulative answers that we'd expect feature data, AND the
+        // feature_stats payload is genuinely empty. This avoids alarming users
+        // with normal early-session state.
+        const PERSISTENCE_MIN_QUESTIONS = 10;
+        const cumulativeFeatureKeysWithData = Object.keys(cumulativeFeatureScorecard)
+          .filter(k => cumulativeFeatureScorecard[k] && Object.keys(cumulativeFeatureScorecard[k]).length > 0);
+        const persistenceErrorDetected =
+          cumulativeTotal >= PERSISTENCE_MIN_QUESTIONS && cumulativeFeatureKeysWithData.length === 0;
+
+        // Display debug information
+        const debugEl = DEBUG_ENABLED ? document.getElementById('debug-info') : null;
+        if (debugEl) {
+          const sessionCats = Object.keys(sessionFeatureScorecard)
+            .filter(k => sessionFeatureScorecard[k] && Object.keys(sessionFeatureScorecard[k]).length > 0).length;
+          const cumulativeCats = Object.keys(cumulativeFeatureScorecard)
+            .filter(k => cumulativeFeatureScorecard[k] && Object.keys(cumulativeFeatureScorecard[k]).length > 0).length;
+
+          debugEl.innerHTML =
+            `<div style="margin-bottom: 15px;">` +
+            `<strong>Session data:</strong><ul>` +
+            `<li>Questions: ${escapeHtml(String(sessionTotal))}</li>` +
+            `<li>Has feature data: ${escapeHtml(String(sessionScoreData.debug_info?.has_feature_data || false))}</li>` +
+            `<li>Features with data: ${escapeHtml(String(sessionScoreData.debug_info?.features_count || 0))}</li>` +
+            `<li>Feature categories with entries: ${escapeHtml(String(sessionCats))}</li>` +
+            `</ul></div>` +
+            `<div><strong>Cumulative data:</strong><ul>` +
+            `<li>Questions: ${escapeHtml(String(cumulativeTotal))}</li>` +
+            `<li>Has feature data: ${escapeHtml(String(cumulativeScoreData.debug_info?.has_feature_data || false))}</li>` +
+            `<li>Features with data: ${escapeHtml(String(cumulativeScoreData.debug_info?.features_count || 0))}</li>` +
+            `<li>Feature categories with entries: ${escapeHtml(String(cumulativeCats))}</li>` +
+            `</ul></div>` +
+            `<div><strong>Raw data examination:</strong></div>`;
+
+          // Use a text node for the raw JSON to prevent HTML injection from
+          // server-supplied feature values.
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'max-height:100px;overflow-y:auto;font-size:10px;background:#f5f5f5;padding:5px;margin-top:10px;';
+          const sessionSample = Object.keys(sessionFeatureScorecard).slice(0, 3).reduce((obj, key) => {
+            obj[key] = sessionFeatureScorecard[key]; return obj;
+          }, {});
+          const cumulativeSample = Object.keys(cumulativeFeatureScorecard).slice(0, 3).reduce((obj, key) => {
+            obj[key] = cumulativeFeatureScorecard[key]; return obj;
+          }, {});
+          pre.textContent =
+            'Session feature_stats sample: ' + JSON.stringify(sessionSample, null, 2) +
+            '\n\nCumulative feature_stats sample: ' + JSON.stringify(cumulativeSample, null, 2);
+          debugEl.appendChild(pre);
+        }
+        // debugEl may be null when DEBUG_ENABLED=false; subsequent appends are guarded.
+
+        // Populate feature selector for current mode
+        const currentFeatureScorecard = currentDataMode === 'session' ? sessionFeatureScorecard : cumulativeFeatureScorecard;
+        populateFeatureSelector(currentFeatureScorecard);
+
+        // Generate heatmaps
+        generateHeatmap(sessionFeatureScorecard, 'session-heatmap', 'session-heatmap-loading');
+        generateHeatmap(cumulativeFeatureScorecard, 'cumulative-heatmap', 'cumulative-heatmap-loading');
+
+        // The legacy in-feature "focus areas" callout (under the Feature Detail
+        // dropdown) only appears when a feature is selected, so we no longer
+        // pre-render it here. The new top-level Strengths/Areas panels above
+        // already cover the broad weak/strong picture.
+        document.getElementById('weak-areas-container').style.display = 'none';
+        
+        // Check for data inconsistency
+        if (persistenceErrorDetected) {
+          const warning = document.createElement('div');
+          warning.style.backgroundColor = '#ffebee';
+          warning.style.padding = '10px';
+          warning.style.borderRadius = '5px';
+          warning.style.marginTop = '15px';
+          warning.style.border = '1px solid #f44336';
+          warning.innerHTML = `
+            <strong>Data Consistency Issue Detected</strong>
+            <p>Your cumulative data shows ${cumulativeTotal} completed questions, but no feature details are available. 
+            This may indicate that features aren't being correctly saved between sessions.</p>
+            <p>Please check the server logs and refresh the page. If the issue persists, you may need to reset the data.</p>
+            <button id="fix-data-btn" style="background: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-top: 10px;">
+              Attempt Data Repair
+            </button>
+          `;
+          if (debugEl) {
+            debugEl.appendChild(warning);
+            const fixBtn = document.getElementById('fix-data-btn');
+            if (fixBtn) fixBtn.addEventListener('click', attemptDataRepair);
+          }
+        }
+
+      } catch (error) {
+        console.error('Error loading scorecard:', error);
+        document.getElementById('session-heatmap-loading').textContent = 'Error loading data. Please try again.';
+        document.getElementById('cumulative-heatmap-loading').textContent = 'Error loading data. Please try again.';
+        writeDebug('append', `<p style="color: red;">Error: ${error.message}</p>`);
+      }
+    }
+
+    // Attempt to repair feature data
+    async function attemptDataRepair() {
+      try {
+        writeDebug('append', `<p>Attempting to repair feature data...</p>`);
+        
+        const token = localStorage.getItem('token');
+        const response = await fetch('/repair-feature-data', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          writeDebug('append', `
+            <p style="color: green;">Data repair attempt completed.</p>
+            <p>${result.message}</p>
+          `);
+          // Reload data
+          await loadScorecard();
+        } else {
+          writeDebug('append', `
+            <p style="color: red;">Data repair failed: ${response.statusText}</p>
+          `);
+        }
+      } catch (error) {
+        console.error('Error repairing data:', error);
+        writeDebug('append', `
+          <p style="color: red;">Error repairing data: ${error.message}</p>
+        `);
+      }
+    }
+
+    function populateFeatureSelector(featureScorecard) {
+      const selector = document.getElementById('feature-selector');
+      selector.innerHTML = '<option value="">Select a feature to analyze...</option>';
+
+      // Get features that actually have data
+      const featuresWithData = [];
+      for (const feature in featureScorecard) {
+        if (featureScorecard[feature] && Object.keys(featureScorecard[feature]).length > 0) {
+          featuresWithData.push(feature);
+        }
+      }
+      
+      // Sort features alphabetically
+      featuresWithData.sort();
+      
+      // Add options to selector
+      for (const feature of featuresWithData) {
+        const option = document.createElement('option');
+        option.value = feature;
+        option.textContent = formatFeatureName(feature);
+        selector.appendChild(option);
+      }
+
+      // Remove existing event listeners by cloning and replacing
+      const newSelector = selector.cloneNode(true);
+      selector.parentNode.replaceChild(newSelector, selector);
+
+      // Add event listener to the new selector
+      newSelector.addEventListener('change', function() {
+        if (this.value) {
+          const currentFeatureScorecard = currentDataMode === 'session' ? sessionFeatureScorecard : cumulativeFeatureScorecard;
+          showFeatureDetail(this.value, currentFeatureScorecard);
+        } else {
+          if (currentFeatureChart) {
+            currentFeatureChart.destroy();
+            currentFeatureChart = null;
+          }
+          document.getElementById('weak-areas-container').style.display = 'none';
+        }
+      });
+      
+      // Show debug message about feature selection
+      writeDebug('append', `<p>Feature selector populated with ${featuresWithData.length} features that have data.</p>`);
+    }
+
+    function formatFeatureName(name) {
+      // Convert snake_case to Title Case with spaces
+      return name
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    function generateHeatmap(featureScorecard, heatmapId, loadingId) {
+      const heatmapEl = document.getElementById(heatmapId);
+      const loadingEl = document.getElementById(loadingId);
+
+      console.log(`Generating heatmap for ${heatmapId} with data:`, featureScorecard);
+
+      // Clear any existing heatmap
+      heatmapEl.innerHTML = '';
+
+      // Initialize diagnostics
+      let featuresWithData = 0;
+      let itemsWithData = 0;
+      let skippedItems = 0;
+      
+      // Check if featureScorecard is valid and has data
+      const hasData = Object.keys(featureScorecard || {}).some(feature => 
+        featureScorecard[feature] && Object.keys(featureScorecard[feature]).length > 0
+      );
+      
+      if (!hasData) {
+        loadingEl.textContent = 'Play a few more rounds with varied shapes to populate this heatmap.';
+        return;
+      }
+
+      // Extract features with enough data
+      const heatmapData = [];
+
+      for (const feature in featureScorecard) {
+        // Skip if feature is null or undefined
+        if (!featureScorecard[feature]) continue;
+        
+        const featureData = featureScorecard[feature];
+        const featureValues = Object.entries(featureData);
+
+        if (featureValues.length > 0) {
+          featuresWithData++;
+          for (const [value, stats] of featureValues) {
+            // Skip if stats is null or undefined
+            if (!stats) continue;
+            
+            const total = (stats.correct || 0) + (stats.incorrect || 0);
+            if (total > 0) {
+              itemsWithData++;
+              const accuracy = (stats.correct / total) * 100;
+              heatmapData.push({
+                feature: formatFeatureName(feature),
+                value: value,
+                accuracy: accuracy,
+                total: total
+              });
+            } else {
+              skippedItems++;
+            }
+          }
+        }
+      }
+
+      console.log(`Heatmap data for ${heatmapId}: ${heatmapData.length} items, from ${featuresWithData} features with data. Skipped ${skippedItems} items with no attempts.`);
+
+      if (heatmapData.length === 0) {
+        loadingEl.textContent = 'Not enough data to generate heatmap. Play more rounds with varied shapes!';
+        
+        // Show more detailed debug info
+        const debugInfo = document.createElement('div');
+        debugInfo.style.marginTop = '10px';
+        debugInfo.style.fontSize = '12px';
+        debugInfo.style.color = '#666';
+        debugInfo.innerHTML = `
+          <p>Debug info:</p>
+          <ul>
+            <li>Features with some data: ${featuresWithData}</li>
+            <li>Items with data: ${itemsWithData}</li>
+            <li>Items skipped (no attempts): ${skippedItems}</li>
+          </ul>
+          <p>Try answering more questions with varied shapes to generate more meaningful statistics.</p>
+        `;
+        loadingEl.appendChild(debugInfo);
+        return;
+      }
+
+      loadingEl.style.display = 'none';
+      // Reset any inline width/height the previous (D3-SVG) implementation may
+      // have left behind on this container, otherwise the new flow layout
+      // would inherit a fixed pixel size.
+      heatmapEl.style.width = '';
+      heatmapEl.style.height = '';
+
+      // Group rows by feature, preserving the natural value ordering. Numeric
+      // feature values (e.g. voxel_count buckets, symmetry_score) are sorted
+      // ascending so the chips read like a scale; non-numeric values keep
+      // their original insertion order from the backend.
+      const grouped = new Map();
+      for (const d of heatmapData) {
+        if (!grouped.has(d.feature)) grouped.set(d.feature, []);
+        grouped.get(d.feature).push(d);
+      }
+      const allNumeric = arr => arr.every(d => !isNaN(parseFloat(d.value)) && isFinite(d.value));
+      for (const arr of grouped.values()) {
+        if (allNumeric(arr)) arr.sort((a, b) => parseFloat(a.value) - parseFloat(b.value));
+      }
+
+      // Sort features by name for stable scanning across reloads.
+      const orderedFeatures = [...grouped.keys()].sort();
+
+      // Build the per-feature track grid. Each feature gets one row:
+      //   <feature label> | <wrapping flex row of value chips>
+      // No shared X/Y axis, so unrelated values can never collide.
+      const grid = document.createElement('div');
+      grid.className = 'heatmap-grid';
+
+      for (const feature of orderedFeatures) {
+        const rows = grouped.get(feature);
+        const totalAttempts = rows.reduce((s, r) => s + (r.total || 0), 0);
+
+        const label = document.createElement('div');
+        label.className = 'feature-label';
+        label.innerHTML =
+          `${escapeHtml(feature)}` +
+          `<span class="feature-meta">${rows.length} ${rows.length === 1 ? 'value' : 'values'} · ${totalAttempts} attempts</span>`;
+
+        const valueRow = document.createElement('div');
+        valueRow.className = 'value-row';
+
+        for (const row of rows) {
+          const chip = document.createElement('div');
+          chip.className = 'value-chip';
+          chip.dataset.tier = accuracyTier(row.accuracy);
+          // Native title attr gives a no-JS tooltip with full context.
+          chip.title = `${feature} = ${row.value}\n${Math.round(row.accuracy)}% accuracy across ${row.total} attempt${row.total === 1 ? '' : 's'}`;
+          chip.innerHTML =
+            `<span class="chip-value">${escapeHtml(String(row.value))}</span>` +
+            `<span class="chip-pct">${Math.round(row.accuracy)}%</span>`;
+          valueRow.appendChild(chip);
+        }
+
+        grid.appendChild(label);
+        grid.appendChild(valueRow);
+      }
+
+      heatmapEl.appendChild(grid);
+
+      writeDebug('append',
+        `<p>Heatmap for ${heatmapId}: ${heatmapData.length} value chips across ${orderedFeatures.length} features.</p>`);
+    }
+
+    /** Map an accuracy percentage to one of five visual tiers. Thresholds match
+     * the heatmap legend and the verdict pill colours used elsewhere on the
+     * scorecard, so the same number reads the same way everywhere. */
+    function accuracyTier(pct) {
+      if (pct >= 85) return 'strong';
+      if (pct >= 70) return 'good';
+      if (pct >= 50) return 'average';
+      if (pct >= 30) return 'weak';
+      return 'very-weak';
+    }
+
+    function showFeatureDetail(feature, currentFeatureScorecard) {
+      if (!currentFeatureScorecard || !currentFeatureScorecard[feature]) return;
+
+      const featureData = currentFeatureScorecard[feature];
+      const chartData = {
+        labels: [],
+        datasets: [
+          {
+            label: 'Accuracy (%)',
+            data: [],
+            backgroundColor: [],
+            borderColor: [],
+            borderWidth: 1
+          },
+          {
+            label: 'Response Time (seconds)',
+            data: [],
+            backgroundColor: 'rgba(0, 120, 200, 0.2)',
+            borderColor: 'rgba(0, 120, 200, 1)',
+            borderWidth: 1,
+            yAxisID: 'y1'
+          }
+        ]
+      };
+
+      for (const [value, stats] of Object.entries(featureData)) {
+        const total = (stats.correct || 0) + (stats.incorrect || 0);
+        if (total > 0) {
+          const accuracy = (stats.correct / total) * 100;
+          chartData.labels.push(value);
+          chartData.datasets[0].data.push(accuracy);
+
+          // Color based on accuracy
+          let color;
+          if (accuracy >= 80) color = 'rgba(46, 204, 113, 0.8)';
+          else if (accuracy >= 60) color = 'rgba(52, 152, 219, 0.8)';
+          else if (accuracy >= 40) color = 'rgba(241, 196, 15, 0.8)';
+          else color = 'rgba(231, 76, 60, 0.8)';
+
+          chartData.datasets[0].backgroundColor.push(color);
+          chartData.datasets[0].borderColor.push(color.replace('0.8', '1'));
+
+          // Add response time if available
+          chartData.datasets[1].data.push(stats.avg_response_time || 0);
+        }
+      }
+
+      if (chartData.labels.length === 0) {
+        if (currentFeatureChart) {
+          currentFeatureChart.destroy();
+          currentFeatureChart = null;
+        }
+        document.getElementById('feature-chart-container').innerHTML = '<div class="loading">Not enough data for this feature</div>';
+        return;
+      }
+
+      // Create chart
+      const ctx = document.getElementById('feature-chart').getContext('2d');
+
+      if (currentFeatureChart) {
+        currentFeatureChart.destroy();
+      }
+
+      currentFeatureChart = new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: {
+                display: true,
+                text: 'Accuracy (%)'
+              }
+            },
+            y1: {
+              beginAtZero: true,
+              position: 'right',
+              grid: {
+                drawOnChartArea: false
+              },
+              title: {
+                display: true,
+                text: 'Response Time (s)'
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: `Performance Analysis: ${formatFeatureName(feature)}`
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const datasetLabel = context.dataset.label;
+                  const value = context.raw;
+                  if (datasetLabel === 'Accuracy (%)') {
+                    return `Accuracy: ${value.toFixed(1)}%`;
+                  } else {
+                    return `Response Time: ${value.toFixed(2)} seconds`;
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // ---- New scorecard helpers (cards, verdict banner, insight panels) ----
+
+    /**
+     * Map an accuracy percentage to a verdict tier used both for the pill
+     * label and the banner narrative. Thresholds are intentionally aligned
+     * with the heatmap legend so users see consistent language across views.
+     */
+    function accuracyVerdict(accPct) {
+      if (accPct == null || isNaN(accPct)) return { tier: 'unknown', label: 'no data' };
+      if (accPct >= 85) return { tier: 'strong',   label: 'strong' };
+      if (accPct >= 70) return { tier: 'good',     label: 'on track' };
+      if (accPct >= 50) return { tier: 'building', label: 'building' };
+      return                  { tier: 'practice', label: 'needs practice' };
+    }
+
+    function formatRtSeconds(rtSeconds) {
+      if (rtSeconds == null || isNaN(rtSeconds)) return null;
+      // Backend stores response_time in seconds. Show two formats based on
+      // magnitude so quick answers don't look like "0s".
+      if (rtSeconds < 10) return `${rtSeconds.toFixed(1)}s`;
+      return `${Math.round(rtSeconds)}s`;
+    }
+
+    /** Render the four stat cards for a given tab. */
+    function renderSummaryCards(prefix, scoreData) {
+      const total = scoreData.total_questions || 0;
+      const correct = scoreData.correct_answers || 0;
+      const incorrect = Math.max(0, total - correct);
+      const accPct = scoreData.accuracy != null
+        ? scoreData.accuracy
+        : (total > 0 ? (correct / total) * 100 : null);
+
+      const accEl = document.getElementById(`${prefix}-accuracy-value`);
+      const pillEl = document.getElementById(`${prefix}-accuracy-pill`);
+      const totalEl = document.getElementById(`${prefix}-total-value`);
+      const splitEl = document.getElementById(`${prefix}-split-value`);
+      const rtEl = document.getElementById(`${prefix}-rt-value`);
+
+      if (accEl) accEl.textContent = total > 0 ? `${Math.round(accPct)}%` : '–';
+      if (pillEl) {
+        const v = accuracyVerdict(total > 0 ? accPct : null);
+        pillEl.className = `verdict-pill ${v.tier}`;
+        pillEl.textContent = v.label;
+      }
+      if (totalEl) totalEl.textContent = total;
+
+      if (splitEl) {
+        if (total > 0) {
+          splitEl.classList.remove('muted');
+          splitEl.innerHTML = `<span style="color:#1f7a3a;">${correct}</span>` +
+            `<span style="color:#aaa; margin: 0 6px;">·</span>` +
+            `<span style="color:#a14315;">${incorrect}</span>`;
+        } else {
+          splitEl.classList.add('muted');
+          splitEl.textContent = '–';
+        }
+      }
+
+      if (rtEl) {
+        const rtTxt = formatRtSeconds(scoreData.avg_response_time);
+        if (rtTxt) {
+          rtEl.classList.remove('muted');
+          rtEl.textContent = rtTxt;
+        } else {
+          rtEl.classList.add('muted');
+          rtEl.textContent = '–';
+        }
+      }
+    }
+
+    /** Build an encouraging, specific summary sentence for a tab. */
+    function renderSummaryBanner(prefix, scoreData) {
+      const banner = document.getElementById(`${prefix}-summary-banner`);
+      if (!banner) return;
+
+      const total = scoreData.total_questions || 0;
+      if (total < 5) {
+        banner.classList.add('empty');
+        banner.textContent = prefix === 'session'
+          ? 'Answer a few more questions this session to see a personalized summary.'
+          : 'Play a few sessions to build a personalized cumulative summary.';
+        return;
+      }
+      banner.classList.remove('empty');
+
+      const accPct = scoreData.accuracy != null ? scoreData.accuracy : 0;
+      const v = accuracyVerdict(accPct);
+
+      let opener;
+      if (v.tier === 'strong')        opener = `You're doing well overall — <strong>${Math.round(accPct)}%</strong> across ${total} questions.`;
+      else if (v.tier === 'good')     opener = `Solid run — <strong>${Math.round(accPct)}%</strong> across ${total} questions.`;
+      else if (v.tier === 'building') opener = `You're building — <strong>${Math.round(accPct)}%</strong> across ${total} questions, with room to grow.`;
+      else                            opener = `Tough run — <strong>${Math.round(accPct)}%</strong> across ${total} questions. Keep at it.`;
+
+      const strong = (scoreData.strong_areas || [])[0];
+      const weak = (scoreData.weak_areas || [])[0];
+
+      const parts = [opener];
+      if (strong) {
+        parts.push(`Strongest with <span class="pos">${formatFeatureName(strong.feature)}: ${escapeHtml(String(strong.value))}</span> (${Math.round(strong.success_rate)}%).`);
+      }
+      if (weak) {
+        parts.push(`Practice <span class="neg">${formatFeatureName(weak.feature)}: ${escapeHtml(String(weak.value))}</span> (${Math.round(weak.success_rate)}%).`);
+      }
+      if (!strong && !weak && total >= 5) {
+        parts.push('Keep going to surface clear strengths and weak spots.');
+      }
+      banner.innerHTML = parts.join(' ');
+    }
+
+    /** Render either a strengths or weak-areas list panel. */
+    function renderInsightPanel(prefix, items, kind) {
+      const list = document.getElementById(`${prefix}-list`);
+      const empty = document.getElementById(`${prefix}-empty`);
+      if (!list || !empty) return;
+      list.innerHTML = '';
+      const arr = Array.isArray(items) ? items : [];
+      if (arr.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      arr.forEach(item => {
+        const li = document.createElement('li');
+        const featureLabel = formatFeatureName(item.feature);
+        const valueLabel = String(item.value);
+        const pct = Math.round(item.success_rate);
+        li.innerHTML =
+          `<span class="label"><strong>${escapeHtml(valueLabel)}</strong>` +
+          `<span class="feature-name">· ${escapeHtml(featureLabel)}</span></span>` +
+          `<span class="pct">${pct}%<span class="attempts">${item.attempts || 0} attempts</span></span>`;
+        list.appendChild(li);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function highlightWeakAreas(weakAreas) {
+      // weakAreas is now passed directly from the API
+      if (!weakAreas || !Array.isArray(weakAreas)) {
+        weakAreas = [];
+      }
+
+      // Format the weak areas for display
+      const formattedWeakAreas = weakAreas.map(area => ({
+        feature: formatFeatureName(area.feature),
+        value: area.value,
+        accuracy: area.success_rate
+      }));
+
+      // Show weak areas section if there are any
+      const weakAreasContainer = document.getElementById('weak-areas-container');
+      const weakAreasList = document.getElementById('weak-areas-list');
+
+      if (formattedWeakAreas.length > 0) {
+        weakAreasList.innerHTML = '';
+        formattedWeakAreas.forEach(area => {
+          const li = document.createElement('li');
+          li.textContent = `${area.feature}: ${area.value} (${Math.round(area.accuracy)}% accuracy)`;
+          weakAreasList.appendChild(li);
+        });
+        weakAreasContainer.style.display = 'block';
+      } else {
+        weakAreasContainer.style.display = 'none';
+      }
+    }
+
+    async function resetSessionStats() {
+      if (!confirm('Are you sure you want to reset the current session statistics? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/reset-session', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('Session statistics reset successfully');
+          window.location.reload();
+        } else {
+          alert('Failed to reset session statistics');
+        }
+      } catch (error) {
+        console.error('Reset error:', error);
+        alert('Error resetting session statistics');
+      }
+    }
+
+    async function resetAllStats() {
+      if (!confirm('WARNING: This will reset ALL data, including cumulative statistics across all sessions. This cannot be undone. Continue?')) {
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/reset-all-data', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('All statistics reset successfully');
+          window.location.reload();
+        } else {
+          alert('Failed to reset all statistics');
+        }
+      } catch (error) {
+        console.error('Reset error:', error);
+        alert('Error resetting all statistics');
+      }
+    }
+
+    // ---- AI Coaching Functions ----
+    async function checkCoachingStatus() {
+      const badge = document.getElementById('coaching-status-badge');
+      const btn = document.getElementById('coaching-analyze-btn');
+      try {
+        const resp = await fetch('/coaching/status');
+        const data = await resp.json();
+        if (data.available) {
+          badge.textContent = data.model || 'online';
+          badge.className = 'coaching-status-badge online';
+          btn.disabled = false;
+        } else {
+          badge.textContent = 'offline';
+          badge.className = 'coaching-status-badge offline';
+          btn.disabled = false; // still allow — will get fallback tips
+        }
+      } catch (e) {
+        badge.textContent = 'offline';
+        badge.className = 'coaching-status-badge offline';
+        btn.disabled = false;
+      }
+    }
+
+    async function getCoachingAnalysis() {
+      const btn = document.getElementById('coaching-analyze-btn');
+      const spinner = document.getElementById('coaching-spinner');
+      const content = document.getElementById('coaching-content');
+
+      btn.disabled = true;
+      spinner.className = 'coaching-spinner visible';
+      content.className = 'coaching-content';
+      content.innerHTML = '';
+
+      try {
+        const token = localStorage.getItem('token');
+        const resp = await fetch('/coaching/scorecard-analysis', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        // Render with basic markdown bold support
+        let html = data.coaching_text
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br>');
+
+        content.innerHTML = html;
+        if (data.source === 'fallback') {
+          content.innerHTML += '<div class="coaching-fallback">Tips generated from rule-based analysis (LLM unavailable)</div>';
+        } else if (data.latency_ms) {
+          content.innerHTML += `<div class="coaching-fallback">Generated by ${data.model || 'LLM'} in ${(data.latency_ms / 1000).toFixed(1)}s</div>`;
+        }
+        content.className = 'coaching-content visible';
+      } catch (e) {
+        content.innerHTML = 'Unable to load coaching analysis. Please try again.';
+        content.className = 'coaching-content visible';
+        console.error('Coaching error:', e);
+      } finally {
+        spinner.className = 'coaching-spinner';
+        btn.disabled = false;
+      }
+    }
+
+    // Debug panel is hidden by default; enable with ?debug=1 query string.
+    const DEBUG_ENABLED = new URLSearchParams(window.location.search).get('debug') === '1';
+
+    // Safe wrapper so removing the debug panel never crashes code paths that wrote to it.
+    function writeDebug(mode, content) {
+      if (!DEBUG_ENABLED) return;
+      const el = document.getElementById('debug-info');
+      if (!el) return;
+      if (mode === 'text') el.textContent = content;
+      else if (mode === 'html') el.innerHTML = content;
+      else if (mode === 'append') el.innerHTML += content;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      if (DEBUG_ENABLED) {
+        const panel = document.getElementById('debug-panel');
+        if (panel) panel.style.display = 'block';
+      }
+      loadScorecard();
+      checkCoachingStatus();
+
+      // Add event listener for manual repair button (only wired when panel is visible)
+      const repairBtn = document.getElementById('manual-repair-btn');
+      if (DEBUG_ENABLED && repairBtn) {
+        repairBtn.addEventListener('click', attemptDataRepair);
+      }
+    });
+    
+    // Refresh page with connection fix
+    function refreshWithFix() {
+      // Add a flag to indicate we're trying a fix
+      localStorage.setItem('trying_feature_fix', 'true');
+      
+      // Force reload the page
+      window.location.reload();
+    }
+  </script>
+</body>
+</html>

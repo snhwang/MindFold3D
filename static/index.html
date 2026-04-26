@@ -1,0 +1,3607 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>MindFold 3D – Match the Shape</title>
+  <!--OG_META-->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f0f0f0;
+      overscroll-behavior: none;
+      /* Prevent pull-to-refresh and overscroll effects */
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      text-align: center;
+      padding: 0.25rem 0;
+      background: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 80px;
+      min-height: 80px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      margin: 0 auto;
+    }
+
+    header img {
+      max-height: 70px;
+      width: auto;
+      margin-right: 0.5rem;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 0.7rem;
+      color: #555;
+      max-width: 150px;
+    }
+
+    .user-menu {
+      position: relative;
+      margin-right: 0.5rem;
+      z-index: 200;
+    }
+
+    .user-button {
+      background: #007acc;
+      color: white;
+      border: none;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 100%;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      z-index: 2000;
+      width: 150px;
+    }
+
+    .dropdown-menu.active {
+      display: block;
+    }
+
+    .dropdown-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.5rem 1rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .dropdown-menu button:hover {
+      background: #f0f0f0;
+    }
+
+    /* Outer column that wraps the mode bar + game-area + (sticky) controls.
+       overflow: hidden is the linchpin of the fit-to-viewport behaviour:
+       neither the page nor this container ever scrolls. The interior
+       game-area is a grid that distributes the available space. */
+    #container {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+      padding: 0.5rem 1rem;
+    }
+
+    /* Game area grid. Five rows for five children:
+         row 1  reviewer-context banner   auto
+         row 2  h2 heading                auto
+         row 3  target shape              minmax(0, 1fr)
+         row 4  choices grid              minmax(0, 2fr)
+         row 5  controls strip            auto
+       Children are pinned to numeric rows (not named lines) for
+       cross-browser parsing parity - WebKit / iOS Safari has
+       historically been finicky with named-line grid-template-rows
+       declarations. Numeric rows behave identically everywhere. */
+    #game-area {
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 2fr) auto;
+      grid-template-columns: 1fr;
+      gap: clamp(4px, 0.6vh, 10px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Pin each game-area child to its row so layout is deterministic
+       regardless of source order. */
+    #game-area > #reviewer-context  { grid-row: 1 / 2; }
+    #game-area > h2                 { grid-row: 2 / 3; }
+    #game-area > .target-container  { grid-row: 3 / 4; }
+    #game-area > .choices-container { grid-row: 4 / 5; }
+    #game-area > .controls-container{ grid-row: 5 / 6; }
+
+    #game-area h2 {
+      margin: 0 0 0.1rem 0;
+      /* Reduced bottom margin */
+    }
+
+    /* ---------- Layout: viewers, target, choices (responsive rewrite) ---------- */
+    /* Container for the target shape. Sized by the grid as a fixed-fraction
+       row (see #game-area below). container-type: size makes it a query
+       container so #target can size itself to whichever of cqw/cqh is
+       smaller, producing a square that fits without overflow. */
+    .target-container {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 0;
+      min-width: 0;
+      padding: 0;
+      container-type: size;
+      container-name: target-cell;
+      overflow: hidden;
+    }
+
+    /* Generic viewer base. Concrete sizing is set on #target and on
+       choice viewers via container queries below. */
+    .viewer {
+      border: 1px solid #ccc;
+      background: #eee;
+      touch-action: none;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-sizing: border-box;
+    }
+
+    /* Target: square that fits its container. .target-container is given
+       a sized cell by the surrounding grid; the target uses container
+       queries to pick whichever of width/height is smaller, capped at
+       220px. This way the target shrinks proportionally on short
+       viewports without crowding the choices grid below. */
+    #target {
+      border: 2px solid #007acc;
+      box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
+      width: min(100cqw, 100cqh, 220px);
+      height: min(100cqw, 100cqh, 220px);
+      max-width: 100%;
+      max-height: 100%;
+      margin: 0 auto;
+    }
+
+    /* Wrapper around the choices grid. Critical: height:100% + min-height:0
+       lets the wrapper consume the 1fr row of #game-area, and pass that
+       finite height down to #choices so each cell can compute its size. */
+    .choices-container {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      position: relative;
+      align-items: center;
+      justify-content: center;
+    }
+    .choices-wrapper {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Multiple-choice grid: 4-up on desktop/tablet, 2x2 on phones.
+       min-height:0 lets the grid rows shrink. height:100% binds the grid
+       to the parent's flexed height so each cell can size against it. */
+    #choices {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: clamp(4px, 1vw, 10px);
+      width: 100%;
+      max-width: 920px;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+      margin: 0 auto;
+      padding: 0;
+      align-items: center;
+      justify-items: center;
+    }
+    /* 2x2 grid -> 2 rows by default when 2 columns; explicit row template
+       so each row gets equal share of the available height. */
+    #choices {
+      grid-auto-rows: minmax(0, 1fr);
+    }
+
+    /* Each choice cell is a CSS containment context so its inner viewer
+       can be sized as a square that fits whichever dimension is smaller
+       (cqw vs cqh). This is what makes the grid actually fit-to-viewport
+       at every aspect ratio without per-breakpoint hand-tuning.
+       justify-content: flex-start keeps the viewer at the top of the cell
+       with the Choose button immediately below it (no wasted vertical
+       space when the cell is wider than tall). */
+    .choice-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 1px;
+      box-shadow: none;
+      position: relative;
+      box-sizing: border-box;
+      container-type: size;
+      container-name: choice;
+      overflow: hidden;
+    }
+
+    /* Choice viewer: square that fits within the cell, taking the smaller
+       of the cell's width or (height - label allowance). The label is
+       roughly 1 line at ~0.9rem with ~0.3rem padding above and below =
+       ~2.0em. Reserving 2.0em keeps the square from clipping the button. */
+    .choice-wrapper .viewer {
+      width: min(100cqw, calc(100cqh - 2em));
+      height: min(100cqw, calc(100cqh - 2em));
+      max-width: 100%;
+      max-height: calc(100% - 2em);
+      flex-shrink: 0;
+    }
+
+    /* Choose button hugs the viewer above; no extra top margin so the
+       viewer can grow as large as the cell permits. */
+    .choice-wrapper button.choice {
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .choice-wrapper .viewer.highlight-correct {
+      box-shadow: 0 0 15px 8px #5f5 !important;
+      z-index: 10;
+      position: relative;
+    }
+
+    .choice-wrapper .viewer.highlight-wrong {
+      box-shadow: 0 0 15px 8px #f55 !important;
+      z-index: 10;
+      position: relative;
+    }
+
+    /* Reflow 4-across to 2x2 on narrow screens (phones and small tablets).
+       Bumped from 560 -> 640 because at 600-640px the 4-across cells become
+       cramped (~150px) and crowd the target. With 2 columns the grid will
+       have 2 rows and grid-auto-rows: minmax(0, 1fr) gives each row half
+       the available height. */
+    @media (max-width: 640px) {
+      #choices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 480px;
+      }
+    }
+    /* ---------- End responsive rewrite ---------- */
+
+    /* Controls strip: lives in the last grid row of #game-area, so it
+       always sits at the bottom of the visible area without needing
+       position:sticky (which doesn't compose well with the grid here).
+       overflow-y:auto so a verbose state (long feedback message,
+       expanded coaching panel) scrolls *inside* the strip rather than
+       pushing the choices grid off-screen. */
+    .controls-container {
+      min-height: 0;
+      padding: 6px 8px;
+      margin: 0;
+      background: #f0f0f0;
+      z-index: 100;
+      border-top: 1px solid #ddd;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      max-height: 35svh;
+      overflow-y: auto;
+    }
+
+    button.choice {
+      padding: 0.3rem;
+      font-size: 0.9rem;
+      width: 100%;
+      margin-top: 0.15rem;
+    }
+
+    #feedback {
+      margin-top: 0.25rem;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+
+    #score {
+      margin: 0.25rem 0;
+      font-size: 0.9rem;
+      color: #444;
+    }
+
+    #error {
+      color: red;
+      font-weight: bold;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    #stop-btn,
+    #restart-btn {
+      margin: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+      background-color: #ff5555;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      position: relative;
+      z-index: 20;
+    }
+
+    #restart-btn {
+      background-color: #007acc;
+      display: none;
+    }
+
+    #logout-standalone {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 0.3rem 0.5rem;
+      background-color: #ff5555;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.7rem;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      z-index: 1000 !important;
+      display: block !important;
+    }
+
+    #summary {
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: bold;
+      display: none;
+    }
+
+    #user-info {
+      text-align: center;
+      font-size: 0.8rem;
+      margin-bottom: 0.4rem;
+    }
+
+    /* Additional styles */
+    .streak-info {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #333;
+      margin-bottom: 0.4rem;
+    }
+
+    .streak-bonus {
+      animation: pulse 1s infinite alternate;
+    }
+
+    #difficulty-info {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #333;
+      margin-bottom: 0.4rem;
+    }
+
+    /* Media queries for responsive design */
+    @media (max-width: 768px) {
+      header {
+        padding: 0.25rem 0;
+      }
+
+      #container h2 {
+        font-size: 1.1rem;
+        margin: 0.4rem 0;
+      }
+    }
+
+    @media (max-width: 480px) {
+      header img {
+        max-width: 140px;
+        max-height: 60px;
+      }
+
+      button.choice {
+        width: calc(30vw - 2px);
+        padding: 0.2rem 0;
+        font-size: 0.7rem;
+        margin-top: 0.1rem !important;
+      }
+
+      #stop-btn,
+      #restart-btn {
+        padding: 0.5rem 0.8rem;
+        font-size: 0.85rem;
+      }
+    }
+
+    /* For very small screens */
+    @media (max-width: 375px) {
+
+      /* Make "Choose" buttons more compact */
+      button.choice {
+        width: calc(30vw - 2px);
+        padding: 0.1rem 0;
+        font-size: 0.65rem;
+        margin-top: 0.1rem !important;
+      }
+
+      /* Add side margins to ensure content is centered */
+    }
+
+    /* Additional fix for portrait orientation on mobile */
+    /* AR-specific styles */
+    .ar-ui-element {
+      pointer-events: auto;
+      /* Make sure the elements are interactable */
+    }
+
+    /* Additional mobile optimization */
+    @media (max-width: 480px) {
+
+      /* Ensure choices container is centered with constrained width */
+
+      /* Make the choice boxes scale better */
+
+      /* Make viewer containers slightly smaller to fit better */
+
+      /* Adjust highlight to be less expansive on small screens */
+      .choice-wrapper .viewer.highlight-correct {
+        box-shadow: 0 0 10px 5px #5f5 !important;
+      }
+
+      .choice-wrapper .viewer.highlight-wrong {
+        box-shadow: 0 0 10px 5px #f55 !important;
+      }
+    }
+
+    /* For very small screens - ensure no choice is cut off */
+    @media (max-width: 375px) {
+
+      /* Further reduce size on very small phones */
+
+      /* Make "Choose" buttons more compact */
+      button.choice {
+        padding: 0.15rem;
+        font-size: 0.65rem;
+        margin-top: 0.1rem !important;
+      }
+
+      /* Add side margins to ensure content is centered */
+    }
+
+    /* Ensure overall container is properly centered on all screens */
+
+    /* Failsafe mobile layout - super small screens */
+    @media (max-width: 320px) {
+
+      /* Make everything fit on the smallest screens */
+
+      button.choice {
+        width: calc(30vw - 2px);
+        padding: 0.1rem 0;
+        font-size: 0.6rem;
+        margin-top: 0.1rem !important;
+      }
+
+      /* Target already styled with viewer */
+
+      /* Use smaller highlight to avoid overflow */
+      .choice-wrapper .viewer.highlight-correct {
+        box-shadow: 0 0 5px 2px #5f5 !important;
+      }
+
+      .choice-wrapper .viewer.highlight-wrong {
+        box-shadow: 0 0 5px 2px #f55 !important;
+      }
+
+      /* Reset to absolute minimum styles */
+    }
+
+    /* The MC settings gear button is hidden everywhere by default;
+       only the phone media query (max-width: 640px) below makes it
+       visible when body.mc-active is set. */
+    #mc-settings-toggle { display: none; }
+
+    /* ──────────────────────────────────────────────────────────────
+       Mobile / small-screen fit (2x2 MC grid)
+       This block comes last intentionally so it supersedes the older
+       4-wide mobile rules above. Phones get a 2-by-2 choice grid
+       where each shape stays readable, the target viewer shrinks to
+       share vertical space, and the header / mode nav collapse.
+       ────────────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      /* Container/game-area sizing now comes from the flex/grid in the
+         non-media-query rules above. Just compact the chrome and let
+         the choices grid fill the remaining space automatically. */
+      #container { padding: 0.25rem 0.5rem; }
+
+      /* Compact header so target + 2x2 grid fit above the fold. */
+      header {
+        height: 56px;
+        min-height: 56px;
+      }
+      header img { max-height: 42px; }
+      header p { display: none; } /* tagline hidden on phones */
+
+      /* Compact mode-navigation bar. */
+      .mode-navigation {
+        padding: 4px !important;
+        margin-bottom: 0.25rem !important;
+      }
+      .mode-navigation > div { display: none; } /* 'Game Mode:' label */
+      .mode-navigation button {
+        padding: 6px 10px !important;
+        font-size: 0.95rem !important;
+      }
+
+      /* Headline tighter. */
+      #game-area h2 { font-size: 0.95rem !important; margin: 0.1rem 0 !important; }
+
+      /* ── Target viewer: cap by width AND height. Target shrinks so the
+         2x2 choice grid can fit beneath it on short viewports. */
+
+      /* ── 2x2 choice grid. vh cap is the critical constraint: two rows
+         of (viewer + button) must fit in roughly 50–55 vh on phones. */
+      button.choice {
+        width: 100% !important;
+        padding: 0.35rem 0.25rem !important;
+        font-size: 0.85rem !important;
+        margin-top: 0.2rem !important;
+      }
+
+      /* Smaller highlight glow so it doesn't spill into neighbors. */
+      .choice-wrapper .viewer.highlight-correct {
+        box-shadow: 0 0 10px 4px #5f5 !important;
+      }
+      .choice-wrapper .viewer.highlight-wrong {
+        box-shadow: 0 0 10px 4px #f55 !important;
+      }
+
+      /* Tighten the sticky footer so it doesn't eat the grid. */
+      .controls-container {
+        padding: 4px 6px !important;
+        margin: 0 !important;
+        min-height: 0 !important;
+      }
+      #feedback { font-size: 0.95rem !important; margin: 2px 0 !important; }
+      #score { font-size: 0.8rem !important; margin: 0 !important; }
+
+      /* Reviewer banner is hidden on phones - the play area is too
+         tight to share space with a 5-line explanation, and the banner
+         was previously consuming ~170px of viewport on 640px-tall
+         devices, leaving no room for the target shape. */
+      #game-area > #reviewer-context { display: none !important; grid-row: auto !important; }
+
+      /* ────────────────────────────────────────────────────────────
+         Phone focused-MC layout (when body.mc-active).
+         The play area was being squeezed by the page header, the mode
+         navigation strip, the 'Match the Target Shape' h2, and a tall
+         controls strip with a Memory dropdown + 4 checkboxes that
+         clipped at both edges. While the user is actively answering
+         MC questions on a phone we hide all secondary chrome and
+         tuck advanced settings behind a gear button.
+         ──────────────────────────────────────────────────────────── */
+      body.mc-active header { display: none !important; }
+      body.mc-active .mode-navigation { display: none !important; }
+      body.mc-active #game-area h2 { display: none !important; }
+      /* The standalone red logout button is anchored top-right relative
+         to the page; with header hidden it would float in the middle of
+         the play area. Hide it on phones in MC mode (the user can sign
+         out from the settings panel - see #mc-home-link below). */
+      body.mc-active #logout-standalone { display: none !important; }
+
+      /* Difficulty + Streak inline on a single compact line. */
+      body.mc-active #difficulty-info,
+      body.mc-active .streak-info {
+        display: inline-block;
+        font-size: 0.78rem !important;
+        margin: 0 6px !important;
+        opacity: 0.85;
+      }
+      /* Center the inline pair. */
+      body.mc-active .controls-container > #difficulty-info { margin-left: 0 !important; }
+      body.mc-active .controls-container > #difficulty-info::before {
+        content: '';
+        display: block;
+        text-align: center;
+      }
+      body.mc-active .controls-container > #difficulty-info,
+      body.mc-active .controls-container > .streak-info {
+        text-align: center;
+        width: auto;
+      }
+      /* Wrap them in a single centered row by neutralizing block-flow. */
+      body.mc-active .controls-container {
+        text-align: center;
+      }
+
+      /* Hide advanced task-settings panel by default; show when
+         body.mc-settings-open is set. Stack vertically when shown
+         so checkboxes never clip past the edge. */
+      body.mc-active #task-settings {
+        display: none !important;
+      }
+      body.mc-active.mc-settings-open #task-settings {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+        margin: 4px 0 !important;
+        padding: 8px 12px !important;
+      }
+      body.mc-active.mc-settings-open #task-settings label {
+        margin: 0 !important;
+        font-size: 0.85rem !important;
+      }
+      body.mc-active.mc-settings-open #task-settings select {
+        width: 100%;
+      }
+
+      /* Quick Home / Logout links inside the expanded settings panel
+         on phones, so the user has a way out of focused MC mode
+         without us giving up vertical space to a full header. */
+      body.mc-active.mc-settings-open #task-settings #mc-quick-links {
+        display: flex !important;
+        gap: 8px;
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid #d8e0e8;
+        width: 100%;
+      }
+      body.mc-active.mc-settings-open #task-settings #mc-quick-links a {
+        flex: 1;
+        text-align: center;
+        padding: 6px 10px;
+        background: #fff;
+        border: 1px solid #c0c8d0;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        text-decoration: none;
+        color: #333;
+      }
+      #mc-quick-links { display: none; }
+
+      /* Gear (settings) toggle button - only visible on phones in MC.
+         The base rule below the @media block hides it everywhere by
+         default; this rule only fires inside the (max-width: 640px)
+         media query so it's phone-only. */
+      body.mc-active #mc-settings-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        margin-right: 6px;
+        border-radius: 50%;
+        border: 1px solid #c0c8d0;
+        background: #f0f4f8;
+        color: #555;
+        font-size: 1rem;
+        cursor: pointer;
+        vertical-align: middle;
+      }
+      body.mc-active.mc-settings-open #mc-settings-toggle {
+        background: #007acc;
+        color: white;
+        border-color: #007acc;
+      }
+    }
+
+    /* Landscape phones / short viewports: collapse header + mode nav
+       and keep the 2x2 grid so the choices stay visible above the fold.
+       Kicks in whenever the viewport is short (<= 500 px tall), regardless
+       of width, so landscape iPhones, split-view iPads, and browser
+       inspector-sized windows all get the compact treatment. */
+    @media (max-height: 500px) {
+      header {
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 0 !important;
+      }
+      header img { max-height: 36px !important; }
+      header p { display: none; }
+      #container {
+        padding: 0.25rem 0.5rem !important;
+      }
+      .mode-navigation {
+        padding: 3px !important;
+        margin-bottom: 0.2rem !important;
+      }
+      .mode-navigation > div { display: none; } /* 'Game Mode:' label */
+      .mode-navigation button {
+        padding: 4px 8px !important;
+        font-size: 0.85rem !important;
+      }
+      #game-area h2 { display: none; } /* 'Match the Target Shape' */
+
+      /* Side-by-side layout: target on the left, 2x2 grid on the right.
+         Override the column grid with a row grid where the target column
+         is fixed-width and the choices column takes the rest. The
+         portrait named-row template is replaced with a 2-row template,
+         so the named-line grid-row assignments below also get overridden. */
+      #game-area {
+        grid-template-columns: clamp(120px, 28vw, 180px) 1fr !important;
+        grid-template-rows: 1fr auto !important;
+        gap: clamp(8px, 2vw, 16px) !important;
+        align-items: stretch;
+      }
+      /* Banner is hidden in landscape (would crowd the play area). */
+      #game-area > #reviewer-context { display: none !important; grid-row: auto !important; }
+      /* Target spans the first column, stretched so its container has
+         a real height (align-self: center collapses to content height
+         when the child is sized in % of the container -> chicken-and-egg
+         that produced a 22px-tall target). */
+      #game-area > h2 { grid-column: 1 / -1; display: none; grid-row: auto !important; }
+      #game-area > .target-container {
+        grid-column: 1 / 2;
+        grid-row: 1 / 2 !important;
+        align-self: stretch;
+        justify-self: stretch;
+        margin: 0 !important;
+        /* Container-type: size from the base rule still applies, so
+           cqw/cqh resolve against this stretched cell. */
+      }
+      #target {
+        /* Use container query units against the stretched target-container
+           so the shape is a real square that fits. */
+        width: min(100cqw, 100cqh, 180px) !important;
+        height: min(100cqw, 100cqh, 180px) !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+      }
+      #game-area > .choices-container {
+        grid-column: 2 / 3;
+        grid-row: 1 / 2 !important;
+        min-width: 0;
+      }
+      /* Controls span both columns at the bottom. */
+      #game-area > .controls-container {
+        grid-column: 1 / -1;
+        grid-row: 2 / 3 !important;
+      }
+      /* In landscape, prefer a single row of 4 choices: the choices
+         column is wide (vw - target column) and short (~30svh), so
+         packing 4-across gives larger viewers than a 2x2 grid. Fall
+         back to 2x2 only on very narrow landscape (e.g., split-view). */
+      #choices {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-auto-rows: 1fr !important;
+        max-width: 100% !important;
+      }
+      @media (max-height: 500px) and (max-width: 560px) {
+        #choices {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+      }
+      /* Reserve less vertical for the choose button label in landscape. */
+      .choice-wrapper .viewer {
+        width: min(100cqw, calc(100cqh - 1.6em)) !important;
+        height: min(100cqw, calc(100cqh - 1.6em)) !important;
+      }
+      button.choice {
+        width: 100% !important;
+        padding: 0.2rem !important;
+        font-size: 0.7rem !important;
+        margin-top: 0.1rem !important;
+      }
+      .controls-container {
+        padding: 2px 4px !important;
+        margin: 0 !important;
+        min-height: 0 !important;
+        max-height: 45svh !important;
+      }
+      #feedback { font-size: 0.8rem !important; margin: 0 !important; }
+      #score { font-size: 0.7rem !important; margin: 0 !important; }
+      /* Tighten controls in landscape so they don't crowd the playable area. */
+      #score, #feedback { font-size: 0.75rem !important; line-height: 1.2 !important; }
+      .controls-container .options-row,
+      .controls-container > div { gap: 4px !important; margin: 1px 0 !important; }
+      #stop-test-btn { padding: 4px 10px !important; font-size: 0.85rem !important; margin: 2px auto !important; }
+    }
+
+    /* Very narrow phones (<= 360 px): shorten the Choose button text so
+       it doesn't wrap inside the 2x2 grid. */
+    @media (max-width: 360px) {
+      button.choice { font-size: 0.75rem !important; padding: 0.3rem 0.2rem !important; }
+    }
+
+    /* ── Phone-only top bar (back / stats / settings) ──
+       Hidden by default; shown on phones when body.mc-active is set.
+       Replaces the old icon-strip mode-navigation row. */
+    #mc-topbar { display: none; }
+    @media (max-width: 640px) {
+      body.mc-active #mc-topbar {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px;
+        margin-bottom: 4px;
+        background: #f5f7fa;
+        border-bottom: 1px solid #d8e0e8;
+        font-size: 0.78rem;
+        gap: 8px;
+      }
+      body.mc-active #mc-topbar .topbar-btn {
+        background: white;
+        border: 1px solid #c0c8d0;
+        border-radius: 50%;
+        width: 36px; height: 36px;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: #555;
+        text-decoration: none;
+        cursor: pointer;
+        font-size: 1rem;
+        flex: 0 0 auto;
+        padding: 0;
+      }
+      body.mc-active.mc-settings-open #mc-topbar .topbar-btn[data-role="settings"] {
+        background: #007acc; color: white; border-color: #007acc;
+      }
+      body.mc-active #mc-topbar #mc-stats-inline {
+        display: flex; gap: 12px; opacity: 0.85;
+        flex: 1; justify-content: center;
+        color: #2a3b4d;
+      }
+      body.mc-active #mc-topbar #mc-stats-inline span { white-space: nowrap; }
+      /* Compact logo next to the back button so the brand is still present
+         in the slimmed-down phone header. */
+      body.mc-active #mc-topbar #mc-topbar-logo {
+        height: 28px; width: auto;
+        flex: 0 0 auto;
+        display: block;
+      }
+      /* Very narrow phones: hide the logo so back / stats / gear stay
+         comfortably spaced. */
+      @media (max-width: 360px) {
+        body.mc-active #mc-topbar #mc-topbar-logo { display: none; }
+      }
+      /* Hide bottom stats on phones — they're in the top bar now. */
+      body.mc-active #difficulty-info,
+      body.mc-active .streak-info,
+      body.mc-active #score { display: none !important; }
+      /* Hide bottom gear / stop / restart row on phones — back button in top
+         bar is the way out, and the gear in the top bar opens settings. */
+      body.mc-active #mc-bottom-actions { display: none !important; }
+      /* Reduce controls padding now that the bottom is leaner. */
+      body.mc-active .controls-container { padding: 2px 4px !important; }
+    }
+
+    /* ── AI Coach popup modal (after-answer feedback) ──
+       The legacy in-panel coaching block is converted to a centered modal
+       so it doesn't eat the bottom third of small phone screens. */
+    #coaching-modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1999;
+    }
+    #coaching-modal-backdrop.active { display: block; }
+    #coaching-panel.coaching-modal {
+      position: fixed !important;
+      top: 50% !important; left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      width: calc(100% - 32px) !important;
+      max-width: 480px !important;
+      max-height: 70vh !important;
+      z-index: 2000 !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3) !important;
+      padding: 16px !important;
+      font-size: 0.92rem !important;
+      overflow-y: auto !important;
+      border-radius: 8px !important;
+    }
+    #coaching-panel.coaching-modal #coaching-text {
+      font-size: 0.92rem;
+      line-height: 1.45;
+      max-height: 38vh;
+      overflow-y: auto;
+    }
+    #coaching-next-btn {
+      display: none;
+      margin: 10px auto 0;
+      background: #6c5ce7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #coaching-panel.coaching-modal #coaching-next-btn { display: block; }
+    #coaching-next-btn:hover { background: #5848d6; }
+
+    /* ── Builder mode: responsive viewers ──
+       The inline style sets width/height to 250px; on phones that is fine
+       (250 < 440) but on very narrow screens or in landscape it can clip.
+       Use min() so the viewer never exceeds 250px and never exceeds 90vw. */
+    @media (max-width: 640px) {
+      #builder-area #builder-target,
+      #builder-area #builder-workspace {
+        width: min(250px, 90vw) !important;
+        height: min(250px, 90vw) !important;
+      }
+      #builder-area > div > div { align-items: center !important; }
+    }
+
+    /* ── Task settings bar: allow wrapping on narrow screens ──
+       Before mc-active kicks in, the settings row can overflow at ~440px. */
+    #task-settings {
+      flex-wrap: wrap;
+      row-gap: 6px;
+    }
+
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="user-menu">
+      <button id="user-button" class="user-button">User</button>
+      <div id="dropdown-menu" class="dropdown-menu">
+        <button id="profile-btn" onclick="showProfile()">Profile</button>
+        <button id="scorecard-btn" onclick="window.location.href='/static/scorecard.html'">Performance
+          Scorecard</button>
+        <button id="builder-btn" onclick="switchToBuilderMode()">Structure Builder</button>
+        <button id="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </div>
+
+    <div class="logo-container">
+      <img src="/static/logo.png" alt="MindFold 3D Logo" />
+      <p>Train your brain with spatial reasoning</p>
+    </div>
+
+    <div id="user-info" style="font-size: 0.7rem; margin-right: 8px;"></div>
+  </header>
+
+  <div id="container">
+    <!-- Phone-only top bar: shown on mobile in mc-active mode. Replaces the
+         icon-strip mode-navigation row so the user gets back the vertical
+         space those buttons used to occupy. -->
+    <div id="mc-topbar" aria-hidden="true">
+      <a class="topbar-btn" href="/home" data-role="back" aria-label="Back to menu" title="Back to menu"><i class="fas fa-arrow-left"></i></a>
+      <img id="mc-topbar-logo" src="/static/logo.png" alt="MindFold 3D" />
+      <div id="mc-stats-inline">
+        <span title="Difficulty level">L<span id="mc-stats-level">1</span></span>
+        <span title="Current streak"><i class="fas fa-fire" style="color:#ff8c42;"></i> <span id="mc-stats-streak">0</span></span>
+      </div>
+      <button class="topbar-btn" type="button" data-role="settings" onclick="window.toggleMcSettings()" aria-label="Settings" title="Settings"><i class="fas fa-cog"></i></button>
+    </div>
+
+    <!-- Mode Navigation -->
+    <div class="mode-navigation"
+      style="display: flex; justify-content: center; align-items: center; margin-bottom: 0.5rem; background: #f5f5f5; padding: 6px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <div style="font-weight: bold; margin-right: 8px; font-size: 0.9rem;">Game Mode:</div>
+      <button id="home-btn" onclick="window.location.href='/home'"
+        style="background: #6b7280; color: white; font-weight: bold; padding: 8px 12px; margin-right: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Home (mode picker)" aria-label="Home"><i
+          class="fas fa-home"></i></button>
+      <button id="recognition-mode-btn" onclick="switchToRecognitionMode()"
+        style="background: #007acc; color: white; font-weight: bold; padding: 8px 12px; margin-right: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Multiple Choice mode" aria-label="Multiple Choice"><i
+          class="fas fa-eye"></i></button>
+      <button id="builder-mode-btn" onclick="switchToBuilderMode()"
+        style="background: #888; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Structure Builder mode" aria-label="Structure Builder"><i
+          class="fas fa-cubes"></i></button>
+      <button id="help-btn" onclick="showInstructions()"
+        style="background: #00cc66; color: white; margin-left: 10px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Instructions" aria-label="Instructions"><i
+          class="fas fa-question-circle"></i></button>
+      <button id="coach-btn" onclick="requestCoaching()"
+        style="background: #6c5ce7; color: white; margin-left: 4px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; opacity: 0.5;"
+        title="AI Coach (checking...)" aria-label="AI Coach"><i class="fas fa-brain"></i></button>
+    </div>
+
+    <!-- Recognition Mode (Multiple Choice) -->
+    <div id="game-area">
+      <!-- Reviewer context banner: shown on first visit so reviewers immediately
+           understand what MindFold3D is. Dismissal is persisted in localStorage. -->
+      <div id="reviewer-context"
+        style="display: none; max-width: 720px; margin: 0.25rem auto 0.5rem; padding: 10px 14px; background: #f4f7fb; border-left: 3px solid #007acc; border-radius: 0 6px 6px 0; font-size: 0.85rem; color: #2a3b4d; line-height: 1.45;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+          <div>
+            <strong style="font-size: 0.9rem;">About this demo.</strong>
+            MindFold3D is a spatial-reasoning task generator that builds 3D voxel
+            shapes from a controlled feature skeleton. Each trial shows a target
+            shape and several distractors; the platform logs accuracy and response
+            latency per feature dimension to produce a cognitive profile. Use the
+            Memory / Mirror / Parts / Perspective / Expert toggles to explore
+            different task variants.
+          </div>
+          <button id="reviewer-context-dismiss" aria-label="Dismiss"
+            style="background: none; border: none; color: #6b7a8a; font-size: 1rem; cursor: pointer; padding: 0 2px; line-height: 1;">&times;</button>
+        </div>
+      </div>
+
+      <h2 style="margin: 0 0 0.1rem 0; text-align: center; font-size: 1.1rem;">Match the Target Shape</h2>
+
+      <div class="target-container">
+        <div id="target" class="viewer"></div>
+      </div>
+
+      <div class="choices-container">
+        <div class="choices-wrapper" style="width: 100%; display: flex; justify-content: center;">
+          <div id="choices"></div>
+        </div>
+      </div>
+
+      <div class="controls-container">
+        <div id="feedback" style="text-align: center;"></div>
+        <div id="coaching-panel"
+          style="display:none; margin: 6px auto; padding: 8px 10px; max-width: 600px; background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%); border-left: 3px solid #6c5ce7; border-radius: 0 6px 6px 0; font-size: 0.82rem; max-height: 110px; overflow-y: auto; transition: all 0.3s ease;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: bold; color: #6c5ce7; font-size: 0.72rem;"><i class="fas fa-brain"></i> AI
+              Coach</span>
+            <button onclick="dismissCoaching()" aria-label="Close"
+              style="background:none; border:none; cursor:pointer; color:#999; font-size:1.1rem; padding:0 4px; line-height:1;">&times;</button>
+          </div>
+          <div id="coaching-text" style="margin-top: 3px; color: #333; line-height: 1.35;"></div>
+          <button id="coaching-next-btn" type="button" onclick="dismissCoaching()">Next question →</button>
+        </div>
+        <div id="score" style="text-align: center;"></div>
+        <div id="error" style="text-align: center;"></div>
+
+        <div id="difficulty-info">Difficulty Level: <span id="difficulty-level">1</span></div>
+        <div class="streak-info">Current Streak: <span id="current-streak">0</span></div>
+
+        <div id="task-settings"
+          style="display: flex; justify-content: center; align-items: center; gap: 12px; margin: 4px 0; padding: 4px 8px; background: #f0f4f8; border-radius: 6px; font-size: 0.8rem;">
+          <label style="font-weight: bold;">Memory:</label>
+          <select id="wm-mode" style="padding: 3px 6px; border-radius: 4px; font-size: 0.8rem; border: 1px solid #ccc;">
+            <option value="simultaneous">Simultaneous</option>
+            <option value="delayed-short">Delayed (5s view)</option>
+            <option value="delayed-long">Delayed (3s + 2s gap)</option>
+          </select>
+          <label style="font-weight: bold; margin-left: 4px;">
+            <input type="checkbox" id="mirror-mode" /> Mirror
+          </label>
+          <label style="font-weight: bold; margin-left: 4px;">
+            <input type="checkbox" id="part-permuted-mode" /> Parts
+          </label>
+          <label style="font-weight: bold; margin-left: 4px;">
+            <input type="checkbox" id="perspective-mode" /> Perspective
+          </label>
+          <label style="font-weight: bold; margin-left: 4px;"
+            title="Expert mode: 15-25 voxels in 10×10×10 grid with high topological complexity">
+            <input type="checkbox" id="expert-mode" /> Expert
+          </label>
+          <label style="font-weight: bold; margin-left: 4px;"
+            title="Show AI Coach popup after each answer">
+            <input type="checkbox" id="ai-coach-mode" checked /> AI Coach
+          </label>
+          <!-- Quick links shown only inside the phone settings panel
+               (CSS rule body.mc-active.mc-settings-open). On desktop /
+               tablet this stays hidden (#mc-quick-links { display: none }). -->
+          <div id="mc-quick-links">
+            <a href="/">Home</a>
+            <a href="#" onclick="event.preventDefault(); window.handleStandaloneLogout && window.handleStandaloneLogout();">Sign out</a>
+          </div>
+        </div>
+
+        <div id="mc-bottom-actions" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+          <button id="mc-settings-toggle" type="button" onclick="window.toggleMcSettings()"
+            aria-label="Settings" title="Settings">
+            <i class="fas fa-cog"></i>
+          </button>
+          <button id="stop-btn" onclick="endSession()">Stop Test</button>
+          <button id="restart-btn" onclick="restartSession()">Restart</button>
+          <button id="reset-all-button" style="background-color: #ff5555; color: white; display: none;">Reset All
+            Data</button>
+        </div>
+        <div id="summary"></div>
+        <!-- Debug controls removed for production -->
+      </div>
+    </div>
+
+    <!-- Builder Mode -->
+    <!-- Backdrop for the AI Coach modal popup. -->
+    <div id="coaching-modal-backdrop" onclick="dismissCoaching()" aria-hidden="true"></div>
+
+    <div id="builder-area" style="display:none;">
+      <h2 style="text-align:center;">Structure Builder</h2>
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <div style="position:relative; margin-bottom:0.5rem;">
+          <div id="builder-target" style="width:250px; height:250px; border:1px solid #ccc; background:#eee;"></div>
+          <div
+            style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.7); color:white; padding:5px 10px; border-radius:4px; font-weight:bold;">
+            TARGET</div>
+        </div>
+        <div id="builder-workspace"
+          style="width:250px; height:250px; border:1px solid #ccc; background:#eef; margin-bottom:0.5rem;"></div>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+          <div id="mode-buttons" style="display: flex; gap: 0; margin-right: 0.5rem;">
+            <button id="add-mode-btn" onclick="window.setBuilderMode('add')"
+              style="background:#007acc; color: white; font-weight: bold; padding: 8px 16px; border: none; border-radius: 4px 0 0 4px; cursor: pointer; border-right: 1px solid rgba(255,255,255,0.3);">Add</button>
+            <button id="remove-mode-btn" onclick="window.setBuilderMode('remove')"
+              style="background:#888; color: white; font-weight: bold; padding: 8px 16px; border: none; border-radius: 0 4px 4px 0; cursor: pointer;">Remove</button>
+          </div>
+          <button id="reset-builder-btn"
+            style="background: #ff6600; color: white; font-weight: bold; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">Reset</button>
+          <button id="check-builder-btn"
+            style="background: #00cc66; color: white; font-weight: bold; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">Check</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instructions Modal -->
+    <div id="instructions-modal"
+      style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5);">
+      <div
+        style="background-color: white; margin: 10% auto; padding: 20px; border-radius: 8px; width: 80%; max-width: 600px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+        <span onclick="closeInstructions()"
+          style="float: right; cursor: pointer; font-size: 24px; font-weight: bold;">&times;</span>
+        <h2 style="text-align: center; margin-top: 0;">Game Instructions</h2>
+
+        <div id="tabs" style="display: flex; margin-bottom: 15px; border-bottom: 1px solid #ddd;">
+          <div id="recognition-tab" onclick="showTab('recognition')"
+            style="padding: 8px 16px; cursor: pointer; background: #007acc; color: white; border-radius: 4px 4px 0 0; margin-right: 5px;">
+            Recognition Mode</div>
+          <div id="builder-tab" onclick="showTab('builder')"
+            style="padding: 8px 16px; cursor: pointer; background: #ddd; color: #333; border-radius: 4px 4px 0 0;">
+            Builder Mode</div>
+        </div>
+
+        <div id="recognition-content">
+          <h3>Recognition Mode <i class="fas fa-eye" style="color:#007acc;"></i></h3>
+          <p><strong>Goal:</strong> Match the target 3D shape to one of the choices below it.</p>
+          <p><strong>How to play:</strong></p>
+          <ol>
+            <li>Examine the target shape at the top.</li>
+            <li>Rotate shapes by dragging with your mouse/finger to view from different angles.</li>
+            <li>Click the "Choose" button below the shape that matches the target.</li>
+            <li>Get correct answers to increase your score and streak!</li>
+          </ol>
+          <p><strong>Tips:</strong> Pay close attention to the number and arrangement of cubes. Some shapes may look
+            similar from certain angles.</p>
+
+          <div style="margin-top: 15px; background: #f5f5f5; padding: 10px; border-radius: 5px;">
+            <p><strong>Difficulty settings (top toolbar):</strong></p>
+            <ul style="margin: 0 0 8px 18px; padding: 0; font-size: 0.9em;">
+              <li><strong>Memory</strong> — controls when the target is visible:
+                <ul style="margin: 4px 0; padding-left: 18px;">
+                  <li><em>Simultaneous</em> — target stays on screen with the choices (easiest).</li>
+                  <li><em>Delayed (5s view)</em> — target disappears after 5&nbsp;seconds; recall it from memory.</li>
+                  <li><em>Delayed (3s + 2s gap)</em> — target visible 3&nbsp;s, then a 2&nbsp;s blank gap before the choices appear (highest working-memory load).</li>
+                </ul>
+              </li>
+              <li><strong>Mirror</strong> — include a mirror-image distractor (tests chirality / handedness).</li>
+              <li><strong>Parts</strong> — include a part-permuted distractor: same pieces, rearranged (tests configural binding).</li>
+              <li><strong>Perspective</strong> — render choices from different viewpoints than the target (tests perspective-taking).</li>
+              <li><strong>Expert</strong> — larger, more complex shapes (15–25 voxels in a 10×10×10 grid; high topological complexity).</li>
+            </ul>
+          </div>
+
+          <div style="margin-top: 15px; background: #f5f5f5; padding: 10px; border-radius: 5px;">
+            <p><strong>Button Icons:</strong></p>
+            <ul style="list-style-type: none; margin: 0; padding: 0;">
+              <li style="margin-bottom: 8px;"><i class="fas fa-eye"
+                  style="color:#007acc; width: 20px; text-align: center;"></i> - Recognition Mode</li>
+              <li style="margin-bottom: 8px;"><i class="fas fa-cubes"
+                  style="color:#888; width: 20px; text-align: center;"></i> - Builder Mode</li>
+              <li><i class="fas fa-question-circle" style="color:#00cc66; width: 20px; text-align: center;"></i> -
+                Instructions/Help</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="builder-content" style="display: none;">
+          <h3>Builder Mode <i class="fas fa-cubes" style="color:#007acc;"></i></h3>
+          <p><strong>Goal:</strong> Recreate the target 3D structure by adding and removing cubes.</p>
+          <p><strong>How to play:</strong></p>
+          <ol>
+            <li>Examine the target shape at the top.</li>
+            <li>Use the colored axes as reference for orientation.</li>
+            <li>Click faces of existing cubes to add new cubes (in Add mode).</li>
+            <li>Click cubes to remove them (in Remove mode).</li>
+            <li>Toggle between Add/Remove modes using the buttons.</li>
+            <li>Click "Check" to see if your shape matches the target.</li>
+            <li>Click "Reset" to start over.</li>
+          </ol>
+          <p><strong>Tips:</strong> Pay attention to the coordinate system. Your shape must match the target's
+            orientation relative to the axes.</p>
+
+          <div style="margin-top: 15px; background: #f5f5f5; padding: 10px; border-radius: 5px;">
+            <p><strong>Button Icons:</strong></p>
+            <ul style="list-style-type: none; margin: 0; padding: 0;">
+              <li style="margin-bottom: 8px;"><i class="fas fa-eye"
+                  style="color:#888; width: 20px; text-align: center;"></i> - Recognition Mode</li>
+              <li style="margin-bottom: 8px;"><i class="fas fa-cubes"
+                  style="color:#007acc; width: 20px; text-align: center;"></i> - Builder Mode</li>
+              <li><i class="fas fa-question-circle" style="color:#00cc66; width: 20px; text-align: center;"></i> -
+                Instructions/Help</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; text-align: center;">
+          <button onclick="closeInstructions()"
+            style="background: #007acc; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">Got
+            it!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: fixed; top: 80px; right: 10px; z-index: 50; pointer-events: auto;">
+    <button id="logout-standalone"
+      style="padding: 6px 10px; background: #ff5555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);"><i
+        class="fas fa-sign-out-alt"></i></button>
+  </div>
+
+  <audio id="sound-correct" preload="auto">
+    <source src="/static/correct.mp3" type="audio/mpeg">
+  </audio>
+
+  <audio id="sound-wrong" preload="auto">
+    <source src="/static/wrong.mp3" type="audio/mpeg">
+  </audio>
+
+  <audio id="sound-level-complete" preload="auto">
+    <source src="/static/level_up.mp3" type="audio/mpeg">
+  </audio>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+  <!-- Using ES modules for Three.js like in the original working version -->
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.155.0';
+    import { TrackballControls } from 'https://esm.sh/three@0.155.0/examples/jsm/controls/TrackballControls.js';
+    let sessionEnded = false;
+    let _nextQuestionPromise = null;
+
+    function prefetchNextQuestion() {
+      const token = localStorage.getItem('token');
+      if (!token || sessionEnded) return;
+      const includeMirror = document.getElementById('mirror-mode')?.checked || false;
+      const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
+      const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
+      const expertMode = document.getElementById('expert-mode')?.checked || false;
+      _nextQuestionPromise = fetch(
+        `/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&generation_mode=skeleton&expert_mode=${expertMode}&difficulty_level=${difficultyLevel}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      ).then(r => r.ok ? r.json() : null).catch(() => null);
+    }
+
+    // Game difficulty settings
+    // Persisted across reloads so reviewers/users don't drop back to L1 on a
+    // page refresh mid-session. Adaptive level is sent with every
+    // /get-multiple-choice request (see loadQuestion / prefetchNextQuestion).
+    const DIFFICULTY_STORAGE_KEY = 'mindfold3d_difficulty_level';
+    function loadPersistedDifficultyLevel() {
+      try {
+        const raw = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
+        const parsed = parseInt(raw, 10);
+        if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 50) {
+          return parsed;
+        }
+      } catch (e) { /* storage unavailable; fall through */ }
+      return 1;
+    }
+    function persistDifficultyLevel(lvl) {
+      try { localStorage.setItem(DIFFICULTY_STORAGE_KEY, String(lvl)); } catch (e) {}
+    }
+    let difficultyLevel = loadPersistedDifficultyLevel();
+    let currentStreak = 0;
+    let maxStreak = 0;
+    const basePoints = 100; // Base points for a correct answer
+
+    // --- Interaction tracking (Layer 3 behavioral metrics) ---
+    window.interactionTracker = {};
+
+    function createTracker(containerId, shapeId) {
+      return {
+        containerId, shapeId,
+        initialOrientation: { x: 0, y: 0, z: 0 },
+        rotationEvents: 0,
+        totalAngularDisplacement: 0,
+        zoomEvents: 0,
+        panEvents: 0,
+        totalInteractionTime: 0,
+        firstInteractionTime: null,
+        lastInteractionTime: null,
+        _lastQuaternion: null,
+        _interactionStartTime: null,
+        _currentAction: null
+      };
+    }
+
+    function computeAngularDisparity(orientA, orientB) {
+      const q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(orientA.x, orientA.y, orientA.z, 'XYZ'));
+      const q2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(orientB.x, orientB.y, orientB.z, 'XYZ'));
+      const dot = Math.abs(q1.dot(q2));
+      return Math.round(2 * Math.acos(Math.min(1, dot)) * (180 / Math.PI) * 10) / 10;
+    }
+
+    function collectInteractionData(targetId) {
+      const interactionData = { containers: {}, angular_disparity: null, summary: {} };
+      const targetTracker = window.interactionTracker['target'];
+
+      for (const [cid, tracker] of Object.entries(window.interactionTracker)) {
+        interactionData.containers[cid] = {
+          shape_id: tracker.shapeId,
+          rotation_events: tracker.rotationEvents,
+          total_angular_displacement: Math.round(tracker.totalAngularDisplacement * 10) / 10,
+          zoom_events: tracker.zoomEvents,
+          pan_events: tracker.panEvents,
+          total_interaction_time_ms: Math.round(tracker.totalInteractionTime),
+          initial_orientation: tracker.initialOrientation
+        };
+      }
+
+      // Angular disparity: target orientation vs correct choice orientation
+      if (targetTracker) {
+        for (const [cid, tracker] of Object.entries(window.interactionTracker)) {
+          if (cid !== 'target' && tracker.shapeId === targetId) {
+            interactionData.angular_disparity = computeAngularDisparity(
+              targetTracker.initialOrientation, tracker.initialOrientation
+            );
+            break;
+          }
+        }
+      }
+
+      // Summary metrics
+      const containers = Object.values(interactionData.containers);
+      interactionData.summary = {
+        total_rotation_events: containers.reduce((s, c) => s + c.rotation_events, 0),
+        total_angular_displacement: Math.round(containers.reduce((s, c) => s + c.total_angular_displacement, 0) * 10) / 10,
+        total_interaction_time_ms: containers.reduce((s, c) => s + c.total_interaction_time_ms, 0),
+        containers_interacted: containers.filter(c => c.rotation_events > 0 || c.zoom_events > 0).length,
+        total_containers: containers.length
+      };
+
+      return interactionData;
+    }
+
+    // Define logout function in window scope for reliability
+    window.handleStandaloneLogout = function () {
+      console.log("Logout button clicked");
+      try {
+        const token = localStorage.getItem('token');
+        localStorage.removeItem('token'); // Remove token immediately
+
+        // Keep the mode preference even when logging out
+        const preferredMode = localStorage.getItem('mindfold3d-preferred-mode');
+
+        if (token) {
+          fetch('/logout', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }).catch(e => console.error("Logout request error:", e))
+            .finally(() => {
+              window.location.href = '/static/auth.html';
+            });
+        } else {
+          window.location.href = '/static/auth.html';
+        }
+      } catch (error) {
+        console.error('Logout error:', error);
+        window.location.href = '/static/auth.html';
+      }
+    };
+
+    // Add direct onclick attribute to the button in HTML for maximum compatibility
+    // --- LLM Coaching Layer ---
+    let coachingAvailable = false;
+
+    async function checkCoachingStatus() {
+      try {
+        const resp = await fetch('/coaching/status');
+        const data = await resp.json();
+        coachingAvailable = data.available;
+        const btn = document.getElementById('coach-btn');
+        if (btn) {
+          btn.style.opacity = coachingAvailable ? '1' : '0.5';
+          btn.title = coachingAvailable
+            ? `AI Coach (${data.model})`
+            : 'AI Coach (offline — using basic tips)';
+        }
+      } catch (e) {
+        coachingAvailable = false;
+      }
+    }
+
+    // ── Coaching helpers ─────────────────────────────────────────
+    // The AI Coach is now shown as a centered modal (with a backdrop) so it
+    // doesn't permanently consume the bottom of the play area on phones.
+    // After-answer coaching also pauses the auto-advance until the user
+    // dismisses the modal — that's what window._pendingCoachAdvance carries.
+    function isCoachEnabled() {
+      const cb = document.getElementById('ai-coach-mode');
+      return cb ? !!cb.checked : true;
+    }
+    function openCoachingModal() {
+      const panel = document.getElementById('coaching-panel');
+      const backdrop = document.getElementById('coaching-modal-backdrop');
+      if (panel) {
+        panel.classList.add('coaching-modal');
+        panel.style.display = 'block';
+      }
+      if (backdrop) backdrop.classList.add('active');
+    }
+    function closeCoachingModal() {
+      const panel = document.getElementById('coaching-panel');
+      const backdrop = document.getElementById('coaching-modal-backdrop');
+      if (panel) {
+        panel.style.display = 'none';
+        panel.classList.remove('coaching-modal');
+      }
+      if (backdrop) backdrop.classList.remove('active');
+    }
+
+    async function showCoachingFeedback(wasCorrect, responseTime, targetFeatures, interactionData) {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      // Show modal immediately with a spinner so the user sees that something
+      // is being prepared even before the network round-trip completes.
+      const textEl = document.getElementById('coaching-text');
+      openCoachingModal();
+      if (textEl) textEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
+      try {
+        const resp = await fetch('/coaching/feedback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            was_correct: wasCorrect,
+            response_time: responseTime,
+            target_features: targetFeatures || {},
+            task_variant: document.getElementById('wm-mode')?.value || 'simultaneous',
+            mirror_mode: document.getElementById('mirror-mode')?.checked || false,
+            perspective_mode: document.getElementById('perspective-mode')?.checked || false,
+            expert_mode: document.getElementById('expert-mode')?.checked || false,
+            interaction_data: interactionData || null
+          })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          displayCoaching(data.coaching_text, data.source);
+        } else if (textEl) {
+          textEl.textContent = 'Coaching unavailable right now.';
+        }
+      } catch (e) {
+        console.log('Coaching feedback error:', e);
+        if (textEl) textEl.textContent = 'Coaching service unreachable.';
+      }
+    }
+
+    window.requestCoaching = async function () {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const textEl = document.getElementById('coaching-text');
+      openCoachingModal();
+      if (textEl) textEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking...';
+      try {
+        const resp = await fetch('/coaching/advice', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({})
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          displayCoaching(data.coaching_text, data.source);
+        } else if (textEl) {
+          textEl.textContent = 'Could not get coaching advice.';
+        }
+      } catch (e) {
+        if (textEl) textEl.textContent = 'Could not reach the coaching service.';
+      }
+    };
+
+    function displayCoaching(text, source) {
+      const panel = document.getElementById('coaching-panel');
+      const textEl = document.getElementById('coaching-text');
+      if (!panel || !textEl) return;
+      panel.style.display = 'block';
+      textEl.innerHTML = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+      panel.style.borderLeftColor = source === 'fallback' ? '#999' : '#6c5ce7';
+    }
+
+    window.dismissCoaching = function () {
+      closeCoachingModal();
+      // If a post-answer advance is queued, run it now so dismissing the
+      // coach popup also moves us on to the next question.
+      if (typeof window._pendingCoachAdvance === 'function') {
+        const next = window._pendingCoachAdvance;
+        window._pendingCoachAdvance = null;
+        next();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', async function () {
+      // Check authentication first - if not authenticated, redirect to login
+      if (!(await checkAuth())) {
+        console.log("Not authenticated, redirecting to login");
+        return; // Stop further execution since we're redirecting
+      }
+
+      // Only setup UI if we're authenticated
+      const logoutBtn = document.getElementById('logout-standalone');
+      if (logoutBtn) {
+        logoutBtn.setAttribute('onclick', 'window.handleStandaloneLogout()');
+      }
+
+      // Check coaching availability
+      checkCoachingStatus();
+
+      // Honor ?mode=builder / ?mode=recognition from the URL.
+      // Default (no mode param): recognition mode is the visible default in
+      // markup, so flip body.mc-active on too — phone CSS depends on it.
+      const _urlMode = new URLSearchParams(window.location.search).get('mode');
+      if (_urlMode === 'builder' && typeof window.switchToBuilderMode === 'function') {
+        setTimeout(() => window.switchToBuilderMode(), 0);
+      } else if (typeof window.switchToRecognitionMode === 'function') {
+        setTimeout(() => window.switchToRecognitionMode(), 0);
+      }
+
+      // Restore AI Coach toggle state and persist changes.
+      const coachToggle = document.getElementById('ai-coach-mode');
+      if (coachToggle) {
+        const stored = localStorage.getItem('mindfold3d_coach_enabled');
+        if (stored !== null) coachToggle.checked = stored === '1';
+        coachToggle.addEventListener('change', () => {
+          localStorage.setItem('mindfold3d_coach_enabled', coachToggle.checked ? '1' : '0');
+        });
+      }
+
+      // Mirror difficulty / streak into the phone top-bar inline display.
+      const _syncTopbarStat = (srcId, dstId) => {
+        const s = document.getElementById(srcId);
+        const d = document.getElementById(dstId);
+        if (s && d) d.textContent = s.textContent;
+      };
+      const _syncAllTopbarStats = () => {
+        _syncTopbarStat('difficulty-level', 'mc-stats-level');
+        _syncTopbarStat('current-streak', 'mc-stats-streak');
+      };
+      ['difficulty-level', 'current-streak'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) new MutationObserver(_syncAllTopbarStats).observe(el, {
+          childList: true, characterData: true, subtree: true
+        });
+      });
+      _syncAllTopbarStats();
+
+      // Show the reviewer-context banner unless the user has dismissed it.
+      try {
+        const dismissed = localStorage.getItem('mindfold3d_context_dismissed') === '1';
+        const banner = document.getElementById('reviewer-context');
+        if (banner && !dismissed) {
+          banner.style.display = 'block';
+        }
+        const closeBtn = document.getElementById('reviewer-context-dismiss');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            if (banner) banner.style.display = 'none';
+            try { localStorage.setItem('mindfold3d_context_dismissed', '1'); } catch (e) {}
+          });
+        }
+      } catch (e) {
+        console.warn('Reviewer context banner init failed:', e);
+      }
+
+      // Reflect persisted adaptive difficulty level in the UI on page load.
+      try {
+        const lvlSpan = document.getElementById('difficulty-level');
+        if (lvlSpan) lvlSpan.textContent = difficultyLevel;
+      } catch (e) { /* non-fatal */ }
+
+      // Load initial question for authenticated users
+      loadQuestion();
+    });
+
+    // Also set it immediately
+    const logoutBtn = document.getElementById('logout-standalone');
+    if (logoutBtn) {
+      logoutBtn.setAttribute('onclick', 'window.handleStandaloneLogout()');
+    }
+
+    // Check if user is logged in
+    async function checkAuth() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Redirect to auth page if not logged in
+        window.location.href = '/static/auth.html';
+        return false;
+      }
+
+      // Verify token by fetching profile
+      try {
+        const response = await fetch('/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          // Token invalid, redirect to login
+          localStorage.removeItem('token');
+          window.location.href = '/static/auth.html';
+          return false;
+        }
+
+        const userData = await response.json();
+        document.getElementById('user-info').textContent = `Logged in as: ${userData.username}`;
+        document.getElementById('user-button').textContent = userData.username;
+        return true;
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = '/static/auth.html';
+        return false;
+      }
+    }
+
+    // User dropdown toggle
+    window.toggleUserMenu = function () {
+      const dropdown = document.getElementById('dropdown-menu');
+      dropdown.classList.toggle('active');
+      console.log("Dropdown toggled, visible:", dropdown.classList.contains('active'));
+    }
+
+    document.getElementById('user-button').addEventListener('click', window.toggleUserMenu);
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function (event) {
+      const dropdown = document.getElementById('dropdown-menu');
+      const userButton = document.getElementById('user-button');
+      if (!dropdown.contains(event.target) && event.target !== userButton) {
+        dropdown.classList.remove('active');
+      }
+    });
+
+    // Profile function
+    window.showProfile = async function () {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        const response = await fetch('/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          alert(`Username: ${data.username}\nEmail: ${data.email}\nAccount created: ${new Date(data.created_at).toLocaleDateString()}`);
+        }
+      } catch (error) {
+        console.error('Profile error:', error);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          document.getElementById('error').textContent = 'Authentication error. Please log in again.';
+          return null;
+        }
+
+        const res = await fetch('/get-session-stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!res.ok) {
+          throw new Error(`Stats error: ${res.status}`);
+        }
+
+        const stats = await res.json();
+        if (stats && typeof stats.correct_answers !== 'undefined' && typeof stats.total_questions !== 'undefined') {
+          document.getElementById('score').textContent = `Score: ${stats.correct_answers} / ${stats.total_questions}`;
+          document.getElementById('error').textContent = ''; // Clear any previous errors
+        } else {
+          document.getElementById('score').textContent = 'Score: 0 / 0';
+          console.warn('Invalid stats format:', stats);
+        }
+        return stats;
+      } catch (err) {
+        console.error('Stats loading error:', err);
+        document.getElementById('error').textContent = 'Error loading stats: ' + err.message;
+        document.getElementById('score').textContent = 'Score: -- / --';
+        return null;
+      }
+    }
+
+    async function loadQuestion() {
+      if (sessionEnded) return;
+
+      // Clear any delayed matching timers from previous question
+      if (window._wmTimers) {
+        window._wmTimers.forEach(t => clearTimeout(t));
+      }
+      window._wmTimers = [];
+
+      // Reset delayed matching visibility
+      document.getElementById('target').style.visibility = 'visible';
+      document.getElementById('target').style.opacity = '1';
+      const choicesReset = document.getElementById('choices');
+      if (choicesReset) {
+        choicesReset.style.visibility = 'visible';
+        choicesReset.style.opacity = '1';
+      }
+
+      // Clear perspective labels and interaction trackers from previous question
+      document.querySelectorAll('.viewpoint-label').forEach(el => el.remove());
+      window.currentPerspective = null;
+      window.interactionTracker = {};
+
+      // Clear previous data
+      document.getElementById('error').textContent = '';
+      document.getElementById('feedback').textContent = '';
+      document.getElementById('choices').innerHTML = '';
+      console.log("*** DEBUG: Cleared previous question data");
+
+      // Reset any highlights from previous questions
+      document.querySelectorAll('.viewer').forEach(el => {
+        el.style.boxShadow = 'none';
+        el.classList.remove('highlight-correct', 'highlight-wrong');
+      });
+
+      // Ensure logout button is visible
+      document.getElementById('logout-standalone').style.display = 'block';
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error("*** DEBUG: No token found in localStorage!");
+          document.getElementById('error').textContent = 'No authentication token found. Please log in again.';
+          return;
+        }
+
+        console.log("*** DEBUG: Loading new question with token:", token.substring(0, 10) + "...");
+
+        let data = null;
+        if (_nextQuestionPromise) {
+          console.log("*** DEBUG: Awaiting pre-fetched question");
+          data = await _nextQuestionPromise;
+          _nextQuestionPromise = null;
+        }
+        if (!data || !data.target) {
+          console.log("*** DEBUG: Fetching question from API");
+          const includeMirror = document.getElementById('mirror-mode')?.checked || false;
+          const includePartPermuted = document.getElementById('part-permuted-mode')?.checked || false;
+          const perspectiveMode = document.getElementById('perspective-mode')?.checked || false;
+          const expertMode = document.getElementById('expert-mode')?.checked || false;
+          const res = await fetch(`/get-multiple-choice?include_mirror=${includeMirror}&include_part_permuted=${includePartPermuted}&perspective_mode=${perspectiveMode}&generation_mode=skeleton&expert_mode=${expertMode}&difficulty_level=${difficultyLevel}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          console.log("*** DEBUG: API response status:", res.status);
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error("*** DEBUG: API error response:", errorText);
+            throw new Error(`API error: ${res.status} - ${errorText}`);
+          }
+          data = await res.json();
+        }
+        console.log("*** DEBUG: API response data:", data);
+
+        if (!data.target || !data.target.voxels) {
+          console.error("*** DEBUG: Invalid shape data:", data);
+          throw new Error("Invalid shape data");
+        }
+
+        console.log("*** DEBUG: Target data:", data.target);
+        console.log("*** DEBUG: Number of choices:", data.choices ? data.choices.length : 0);
+
+        // Store the ENTIRE target object including features
+        // Make a deep copy to prevent modification issues
+        window.currentTarget = JSON.parse(JSON.stringify(data.target));
+
+        // Verify features were included
+        if (window.currentTarget && window.currentTarget.features) {
+          console.log(`*** DEBUG: Target features stored: ${Object.keys(window.currentTarget.features).length} features`);
+        } else {
+          console.warn("*** DEBUG: Warning: Target loaded, but it does not contain features!");
+          console.log("*** DEBUG: Full target data received:", data.target);
+        }
+
+        // Safety check for target voxels
+        if (!window.currentTarget.voxels || !Array.isArray(window.currentTarget.voxels) || window.currentTarget.voxels.length === 0) {
+          console.error("*** DEBUG: Missing or empty voxels data for target. Creating default cube.");
+          window.currentTarget.voxels = [[0, 0, 0]]; // Simple default cube at origin
+          window.currentTarget.grid_size = [3, 3, 3]; // Default grid size
+        }
+
+        // Store all choices globally for AR view
+        window.currentChoices = data.choices.map(choice => JSON.parse(JSON.stringify(choice)));
+        console.log(`*** DEBUG: Stored ${window.currentChoices.length} choices for AR view`);
+
+        // Store perspective data if present
+        window.currentPerspective = data.perspective || null;
+
+        // Question start time is set below after delayed matching logic
+
+        // Initialize interaction tracker for target
+        window.interactionTracker['target'] = createTracker('target', window.currentTarget.id);
+
+        // Render target shape with better error handling
+        console.log("*** DEBUG: Rendering target shape", window.currentTarget.voxels.length);
+        try {
+          // Log the exact data being passed to renderer
+          console.log("*** DEBUG: Target voxels being rendered:", JSON.stringify(window.currentTarget.voxels).substring(0, 100) + "...");
+          console.log("*** DEBUG: Target grid size:", window.currentTarget.grid_size);
+
+          // Call render with all the verified data
+          if (window.currentPerspective) {
+            renderScene('target', window.currentTarget.voxels, window.currentTarget.grid_size, false, {
+              cameraPosition: window.currentPerspective.target_camera_position,
+              disableControls: true
+            });
+            // Add viewpoint label
+            const targetEl = document.getElementById('target');
+            targetEl.style.position = 'relative';
+            const vpLabel = document.createElement('div');
+            vpLabel.className = 'viewpoint-label';
+            vpLabel.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,122,204,0.85);color:white;padding:2px 8px;border-radius:3px;font-size:0.7rem;font-weight:bold;z-index:10;pointer-events:none;';
+            vpLabel.textContent = 'View: ' + window.currentPerspective.target_viewpoint_label;
+            targetEl.appendChild(vpLabel);
+          } else {
+            renderScene('target', window.currentTarget.voxels, window.currentTarget.grid_size, true);
+          }
+          console.log("*** DEBUG: Target rendering complete");
+
+          // Force a reflow to ensure the container is visible
+          const targetContainer = document.getElementById('target');
+          targetContainer.style.display = 'block';
+
+          // Extra visibility check
+          setTimeout(() => {
+            console.log("*** DEBUG: Target container visible:",
+              window.getComputedStyle(targetContainer).display !== 'none' &&
+              window.getComputedStyle(targetContainer).visibility !== 'hidden');
+          }, 100);
+        } catch (error) {
+          console.error("*** DEBUG: Error rendering target:", error);
+          document.getElementById('error').textContent = "Error rendering shapes. Try refreshing the page.";
+        }
+
+        // Render choice shapes — build all wrappers up front in a single
+        // DocumentFragment so the choice row appears together with the target,
+        // not one box at a time. This removes the 2-5s perceived lag between
+        // target and choices that reviewers noticed during the audit.
+        console.log(`Preparing to render ${data.choices.length} choices`);
+
+        const choicesContainer = document.getElementById('choices');
+        choicesContainer.innerHTML = ''; // Clear any existing choices
+
+        // Verify choices array is valid before proceeding
+        if (!Array.isArray(data.choices)) {
+          console.error("*** DEBUG: Invalid choices data, not an array");
+          throw new Error("Invalid choices data");
+        }
+
+        const fragment = document.createDocumentFragment();
+        const renderPlan = [];
+
+        data.choices.forEach((shape, index) => {
+          if (!shape || !shape.id) {
+            console.error(`*** DEBUG: Invalid shape at index ${index}, skipping`);
+            return;
+          }
+
+          // Safety check to ensure voxels data is valid
+          if (!shape.voxels || !Array.isArray(shape.voxels) || shape.voxels.length === 0) {
+            console.error(`*** DEBUG: Missing or empty voxels data for choice ${index}. Creating default cube.`);
+            shape.voxels = [[0, 0, 0]];
+            shape.grid_size = [3, 3, 3];
+          }
+
+          const wrapperId = `choice-${index}`;
+          const wrapper = document.createElement('div');
+          wrapper.className = 'choice-wrapper';
+          wrapper.innerHTML = `
+            <div id="${wrapperId}" class="viewer"></div>
+            <button class="choice" data-choice-id="${shape.id}" data-target-id="${window.currentTarget.id}" style="margin-top: 0.25rem;">Choose</button>
+          `;
+
+          const choiceBtn = wrapper.querySelector('.choice');
+          if (choiceBtn) {
+            choiceBtn.addEventListener('click', function () {
+              const choiceId = this.getAttribute('data-choice-id');
+              const targetId = this.getAttribute('data-target-id');
+              console.log("Choice button clicked directly:", choiceId, targetId);
+              window.selectChoice(choiceId, targetId);
+            });
+          }
+
+          fragment.appendChild(wrapper);
+          window.interactionTracker[wrapperId] = createTracker(wrapperId, shape.id);
+          renderPlan.push({ wrapperId, shape, index });
+          console.log(`*** DEBUG: Queued choice wrapper ${index} with ID ${wrapperId}`);
+        });
+
+        // Append all wrappers in a single DOM op, then render all scenes
+        // in the next animation frame so layout resolves first (prevents the
+        // empty-canvas race) but without artificial per-choice stagger.
+        choicesContainer.appendChild(fragment);
+
+        requestAnimationFrame(() => {
+          renderPlan.forEach(({ wrapperId, shape, index }) => {
+            console.log(`*** DEBUG: Rendering scene for choice ${index}, ${shape.voxels.length} voxels`);
+            if (window.currentPerspective) {
+              renderScene(wrapperId, shape.voxels, shape.grid_size, false, {
+                cameraPosition: window.currentPerspective.choices_camera_position,
+                disableControls: true
+              });
+            } else {
+              renderScene(wrapperId, shape.voxels, shape.grid_size, true);
+            }
+          });
+        });
+
+        window.currentTargetId = window.currentTarget.id; // Use the copied target's ID
+
+        // Delayed matching (Working Memory mode)
+        const wmMode = document.getElementById('wm-mode')?.value || 'simultaneous';
+        if (wmMode === 'simultaneous') {
+          // Standard: everything visible, timer starts now
+          window.questionStartTime = Date.now();
+        } else {
+          // Hide choices initially
+          const choicesEl = document.getElementById('choices');
+          choicesEl.style.visibility = 'hidden';
+          choicesEl.style.opacity = '0';
+
+          const targetDisplayMs = (wmMode === 'delayed-short') ? 5000 : 3000;
+          const gapMs = (wmMode === 'delayed-long') ? 2000 : 0;
+
+          // After target display time, hide the target
+          const t1 = setTimeout(() => {
+            document.getElementById('target').style.visibility = 'hidden';
+            document.getElementById('target').style.opacity = '0';
+
+            // After optional gap, show choices and start response timer
+            const t2 = setTimeout(() => {
+              choicesEl.style.visibility = 'visible';
+              choicesEl.style.opacity = '1';
+              choicesEl.style.transition = 'opacity 0.2s ease-in';
+              window.questionStartTime = Date.now();
+            }, gapMs);
+            window._wmTimers.push(t2);
+          }, targetDisplayMs);
+          window._wmTimers.push(t1);
+        }
+
+        console.log(`Question loaded (WM mode: ${wmMode}), ready for selection`);
+
+      } catch (err) {
+        console.error("Load failed:", err);
+        document.getElementById('error').textContent = '❌ ' + err.message;
+      }
+    }
+
+    // Store target data globally when loaded
+    window.currentTarget = null;
+    window.questionStartTime = null;
+
+    window.selectChoice = async function (choiceId, targetId) {
+      prefetchNextQuestion();
+
+      // Calculate response time
+      const responseTime = window.questionStartTime ? ((Date.now() - window.questionStartTime) / 1000) : 1.0;
+
+      const correct = choiceId === targetId;
+      const feedbackElement = document.getElementById('feedback');
+
+      // Find all choice wrappers
+      const choiceWrappers = document.querySelectorAll('.choice-wrapper');
+
+      // Find which choice is the correct one (matches the target ID)
+      let correctIndex = -1;
+      let selectedIndex = -1;
+
+      // Examine all choices to find the correct one and the selected one
+      for (let i = 0; i < choiceWrappers.length; i++) {
+        const choiceBtn = choiceWrappers[i].querySelector('.choice');
+        const shapeId = choiceBtn.getAttribute('data-choice-id');
+
+        // If this shape ID is the target ID, it's the correct one
+        if (shapeId === targetId) {
+          correctIndex = i;
+        }
+
+        // If this shape ID is the selected ID, it's the one we clicked
+        if (shapeId === choiceId) {
+          selectedIndex = i;
+        }
+      }
+
+      // Get the correct choice element using the found index
+      const correctChoiceId = `choice-${correctIndex}`;
+      const correctChoiceEl = document.getElementById(correctChoiceId);
+
+      // Get the selected choice element using the found index
+      const selectedChoiceId = `choice-${selectedIndex}`;
+      const selectedChoiceEl = document.getElementById(selectedChoiceId);
+
+      console.log("Correct choice index:", correctIndex);
+      console.log("Selected choice index:", selectedIndex);
+
+      // Update streak
+      if (correct) {
+        currentStreak++;
+        maxStreak = Math.max(maxStreak, currentStreak);
+
+        // Update UI
+        document.getElementById('current-streak').textContent = currentStreak;
+
+        // Add streak bonus (every 3 correct answers increases the level)
+        if (currentStreak > 0 && currentStreak % 3 === 0) {
+          difficultyLevel++;
+          persistDifficultyLevel(difficultyLevel);
+          document.getElementById('difficulty-level').textContent = difficultyLevel;
+          document.getElementById('current-streak').classList.add('streak-bonus');
+          setTimeout(() => document.getElementById('current-streak').classList.remove('streak-bonus'), 2000);
+
+          // Play level up sound
+          document.getElementById('sound-level-complete').play().catch(e => console.log('Sound play error:', e));
+        }
+
+        // Calculate points: base points + flat correctness bonus (10) + streak bonus.
+        // The hardcoded (1 * 10) is a flat correctness bonus, not a time-based bonus.
+        const streakBonus = Math.min(currentStreak * 20, 200); // Cap streak bonus at 200
+        let pointsEarned = basePoints + (1 * 10) + streakBonus;
+
+        feedbackElement.textContent = `✅ Correct! +${pointsEarned} points${streakBonus > 0 ? ` (${streakBonus} streak bonus)` : ''}`;
+        feedbackElement.className = 'animate__animated animate__bounceIn';
+
+        // Play correct sound first, then trigger confetti with a guaranteed delay
+        try {
+          const correctSound = document.getElementById('sound-correct');
+          // First preload the audio
+          correctSound.load();
+
+          // Create a flag to track if confetti has been shown
+          let confettiShown = false;
+
+          // Add event listener to trigger confetti when sound actually plays
+          correctSound.addEventListener('playing', function triggerConfetti() {
+            if (!confettiShown) {
+              // Add small delay after sound starts playing to ensure proper sequencing
+              setTimeout(() => {
+                confetti({
+                  particleCount: 150,
+                  spread: 70,
+                  origin: { y: 0.6 },
+                  colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+                });
+                confettiShown = true;
+              }, 100); // Wait 100ms after sound starts to show confetti
+            }
+            // Remove listener to prevent multiple triggers
+            correctSound.removeEventListener('playing', triggerConfetti);
+          });
+
+          // Try to play the sound
+          const playPromise = correctSound.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(e => {
+              console.error('Correct sound play error:', e);
+              // If sound fails, show confetti after a longer delay to simulate sound timing
+              if (!confettiShown) {
+                setTimeout(() => {
+                  confetti({
+                    particleCount: 150,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+                  });
+                  confettiShown = true;
+                }, 500); // Use longer delay to compensate for missing sound
+              }
+            });
+
+            // Failsafe: If confetti hasn't shown after 1 second for any reason, show it
+            setTimeout(() => {
+              if (!confettiShown) {
+                confetti({
+                  particleCount: 150,
+                  spread: 70,
+                  origin: { y: 0.6 },
+                  colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+                });
+                confettiShown = true;
+              }
+            }, 1200);
+          }
+        } catch (e) {
+          console.error('Error with correct sound:', e);
+          // If there's an error, still show confetti after a delay
+          setTimeout(() => {
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+            });
+          }, 300);
+        }
+
+        // Highlight the correct choice with a green glow effect
+        if (correctChoiceEl) {
+          correctChoiceEl.classList.add('highlight-correct');
+        }
+      } else {
+        // Reset streak on wrong answer
+        currentStreak = 0;
+        document.getElementById('current-streak').textContent = currentStreak;
+
+        feedbackElement.textContent = '❌ Incorrect.';
+        feedbackElement.className = 'animate__animated animate__shakeX';
+
+        // Play wrong sound
+        document.getElementById('sound-wrong').play().catch(e => console.log('Sound play error:', e));
+
+        // Highlight wrong choice in red
+        if (selectedChoiceEl) {
+          selectedChoiceEl.classList.add('highlight-wrong');
+        }
+
+        // Always show the correct answer with green highlight
+        if (correctChoiceEl) {
+          correctChoiceEl.classList.add('highlight-correct');
+        }
+      }
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        document.getElementById('error').textContent = 'Authentication error. Please log in again.';
+        return;
+      }
+
+      // Collect interaction tracking data before submission
+      // NOTE: Must be declared outside try block so it's in scope for the coaching call below
+      const interactionData = collectInteractionData(targetId);
+
+      try {
+
+        // Prepare the submission data
+        const submissionData = {
+          shape_id: choiceId,
+          target_id: targetId,
+          correct: correct,
+          error_type: correct ? null : "wrong-choice",
+          response_time: responseTime,
+          task_variant: document.getElementById('wm-mode')?.value || 'simultaneous',
+          mirror_mode: document.getElementById('mirror-mode')?.checked || false,
+          perspective_mode: document.getElementById('perspective-mode')?.checked || false,
+          expert_mode: document.getElementById('expert-mode')?.checked || false,
+          interaction_data: interactionData
+        };
+
+        // IMPORTANT: Extract the features from the DEEP COPIED global target object
+        if (window.currentTarget && window.currentTarget.features) {
+          // Make a copy of the features to avoid reference issues if not already deep copied
+          submissionData.target_features = JSON.parse(JSON.stringify(window.currentTarget.features));
+          console.log(`Submitting response with ${Object.keys(submissionData.target_features).length} features`);
+          console.log("Sample of submitted features:", JSON.stringify(submissionData.target_features).substring(0, 100) + "...");
+        } else {
+          console.warn("CRITICAL WARNING: No features available for current target at submission time!");
+          console.log("window.currentTarget at submission:", window.currentTarget);
+        }
+
+        const response = await fetch('/submit-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(submissionData)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Score update error:', errorData);
+          document.getElementById('error').textContent = 'Error updating score. Please try again.';
+        } else {
+          const scoreData = await response.json();
+          // Update score immediately
+          document.getElementById('score').textContent = `Score: ${scoreData.score} / ${scoreData.total}`;
+          // Also refresh stats
+          await loadStats();
+        }
+      } catch (err) {
+        console.error('Score submission error:', err);
+        document.getElementById('error').textContent = 'Error updating score: ' + err.message;
+      }
+
+      // Fire coaching feedback asynchronously (non-blocking)
+      const targetFeatures = (window.currentTarget && window.currentTarget.features)
+        ? JSON.parse(JSON.stringify(window.currentTarget.features)) : {};
+      const advance = () => {
+        feedbackElement.className = ''; // Clear animation classes
+        loadQuestion();
+      };
+      if (isCoachEnabled()) {
+        window._pendingCoachAdvance = advance;
+        showCoachingFeedback(correct, responseTime, targetFeatures, interactionData);
+      } else {
+        setTimeout(advance, 1000);
+      }
+    };
+
+    window.endSession = async function () {
+      sessionEnded = true;
+      const stats = await loadStats();
+      document.getElementById('summary').style.display = 'block';
+      document.getElementById('summary').innerHTML = `Test complete!<br/>Final Score: ${stats.correct_answers} / ${stats.total_questions}`;
+      document.getElementById('target').style.display = 'none';
+      document.getElementById('choices').style.display = 'none';
+      document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('restart-btn').style.display = 'inline-block';
+
+      // Add View Scorecard button
+      const scorecardBtn = document.createElement('button');
+      scorecardBtn.innerHTML = '<i class="fas fa-chart-bar"></i> View Detailed Scorecard';
+      scorecardBtn.style.marginTop = '15px';
+      scorecardBtn.style.padding = '10px 15px';
+      scorecardBtn.style.backgroundColor = '#4CAF50';
+      scorecardBtn.style.color = 'white';
+      scorecardBtn.style.border = 'none';
+      scorecardBtn.style.borderRadius = '4px';
+      scorecardBtn.style.cursor = 'pointer';
+      scorecardBtn.onclick = function () {
+        window.location.href = '/static/scorecard.html';
+      };
+      document.getElementById('summary').appendChild(scorecardBtn);
+
+      // Request AI session summary (non-blocking)
+      try {
+        const coachResp = await fetch('/coaching/session-summary', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (coachResp.ok) {
+          const coachData = await coachResp.json();
+          const coachDiv = document.createElement('div');
+          coachDiv.style.cssText = 'margin-top:12px; padding:10px 12px; background:linear-gradient(135deg,#f0f7ff 0%,#e8f0fe 100%); border-left:3px solid #6c5ce7; border-radius:0 6px 6px 0; text-align:left; font-size:0.85rem; line-height:1.5;';
+          const sourceLabel = coachData.source === 'llm' ? 'AI Coach' : 'Tips';
+          coachDiv.innerHTML = '<strong style="color:#6c5ce7;"><i class="fas fa-brain"></i> ' + sourceLabel + ' Session Summary</strong><br><br>'
+            + coachData.coaching_text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+          document.getElementById('summary').appendChild(coachDiv);
+        }
+      } catch (e) { console.log('Session coaching error:', e); }
+
+      // Celebrate with big confetti finale
+      const duration = 3 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+      function randomInRange(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      const interval = setInterval(function () {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti(Object.assign({}, defaults, {
+          particleCount: particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+          colors: ['#26ccff', '#a25afd']
+        }));
+        confetti(Object.assign({}, defaults, {
+          particleCount: particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+          colors: ['#ff5e7e', '#88ff5a']
+        }));
+      }, 250);
+    }
+
+    window.restartSession = async function () {
+      sessionEnded = false;
+
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      await fetch('/reset-session', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      document.getElementById('target').style.display = 'block';
+      document.getElementById('choices').style.display = 'flex';
+      document.getElementById('stop-btn').style.display = 'inline-block';
+      document.getElementById('restart-btn').style.display = 'none';
+      document.getElementById('summary').style.display = 'none';
+
+      // Reset game state
+      difficultyLevel = 1;
+      persistDifficultyLevel(difficultyLevel);
+      currentStreak = 0;
+      maxStreak = 0;
+      document.getElementById('difficulty-level').textContent = difficultyLevel;
+      document.getElementById('current-streak').textContent = currentStreak;
+
+      loadStats();
+      loadQuestion();
+    }
+
+    // Simple render function based on minimal-test.html that we know works
+    function renderScene(containerId, voxels, gridSize, randomRotate = false, options = {}) {
+      console.log(`Rendering scene for ${containerId} with ${voxels ? voxels.length : 0} voxels`);
+
+      // Get container
+      const container = document.getElementById(containerId);
+      if (!container) {
+        console.error(`Container #${containerId} not found!`);
+        return;
+      }
+
+      // Guard against zero-size container (happens right after navigation when
+      // layout hasn't settled). Retry on the next animation frame so the canvas
+      // isn't initialized with aspect=NaN, which produces a blank WebGL viewport.
+      if (container.clientWidth === 0 || container.clientHeight === 0) {
+        const retries = (options._retries || 0);
+        if (retries < 5) {
+          console.warn(`Container #${containerId} has zero size; retrying renderScene (attempt ${retries + 1}/5)`);
+          requestAnimationFrame(() => {
+            renderScene(containerId, voxels, gridSize, randomRotate, { ...options, _retries: retries + 1 });
+          });
+          return;
+        }
+        // Fall through with a sane default if layout never settles.
+        console.warn(`Container #${containerId} still zero-sized after retries; rendering with fallback size.`);
+      }
+
+      // Clear container
+      container.innerHTML = '';
+
+      // Create scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+
+      // Create camera with proper distance. Fall back to 1 when layout is still
+      // pending so aspect is never NaN.
+      const cw = container.clientWidth || 1;
+      const ch = container.clientHeight || 1;
+      const aspect = cw / ch;
+      const camera = new THREE.PerspectiveCamera(65, aspect, 0.1, 1000);
+
+      // Camera positioning
+      if (options.cameraPosition) {
+        // Perspective mode: use exact camera position from backend
+        camera.position.set(options.cameraPosition[0], options.cameraPosition[1], options.cameraPosition[2]);
+        // Fix up-vector for top/bottom views (avoid degenerate lookAt)
+        const pos = options.cameraPosition;
+        if (Math.abs(pos[1]) > Math.abs(pos[0]) && Math.abs(pos[1]) > Math.abs(pos[2])) {
+          camera.up.set(0, 0, pos[1] > 0 ? -1 : 1);
+        } else {
+          camera.up.set(0, 1, 0);
+        }
+      } else if (containerId === 'target' || containerId.startsWith('choice-')) {
+        // Auto-fit: compute the shape's bounding sphere and place the camera
+        // at exactly the distance needed to frame it, plus a padding factor.
+        // This replaces the old fixed 5 / 8 distances, which left small shapes
+        // looking "zoomed in" on tiny mobile cells where there's no room.
+        let radius = 1.0;
+        if (voxels && Array.isArray(voxels) && voxels.length > 0) {
+          let minX = Infinity, minY = Infinity, minZ = Infinity;
+          let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+          voxels.forEach(([x, y, z]) => {
+            minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+          });
+          // Each voxel is a 1×1×1 cube, so add 1 for the cube extent.
+          const sx = (maxX - minX + 1) / 2;
+          const sy = (maxY - minY + 1) / 2;
+          const sz = (maxZ - minZ + 1) / 2;
+          radius = Math.sqrt(sx * sx + sy * sy + sz * sz);
+        }
+        // Phones get larger padding (more zoomed out) so the shape doesn't
+        // crowd the cell — the user explicitly asked for less zoom on mobile.
+        const isPhone = window.innerWidth <= 640;
+        const padding = isPhone ? 1.7 : 1.3;
+        const fovRad = camera.fov * Math.PI / 180;
+        // Fit the sphere in the smaller of the vertical/horizontal FOV so
+        // portrait cells (aspect < 1) zoom out enough to fit the width too.
+        const vFitDist = radius / Math.tan(fovRad / 2);
+        const hFitDist = aspect < 1 ? vFitDist / aspect : vFitDist;
+        const desiredDistance = Math.max(vFitDist, hFitDist) * padding;
+        // Camera sits at (D,D,D), so its distance from origin is D·√3.
+        const D = desiredDistance / Math.sqrt(3);
+        camera.position.set(D, D, D);
+      } else {
+        camera.position.set(3, 3, 3); // Default camera position
+      }
+
+      camera.lookAt(0, 0, 0);
+
+      // Create renderer (use guarded sizes set above).
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(cw, ch);
+      container.appendChild(renderer.domElement);
+
+      // Add lighting
+      const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambient);
+
+      const light = new THREE.DirectionalLight(0xffffff, 0.8);
+      light.position.set(5, 5, 5);
+      scene.add(light);
+
+      // Perspective mode: add fill light from camera position for axis-aligned views
+      if (options.cameraPosition) {
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        fillLight.position.set(options.cameraPosition[0], options.cameraPosition[1], options.cameraPosition[2]);
+        scene.add(fillLight);
+      }
+
+      // Create group
+      const group = new THREE.Group();
+
+      // Add voxels
+      if (voxels && Array.isArray(voxels) && voxels.length > 0) {
+        const geometry = new THREE.BoxGeometry(1.0, 1.0, 1.0); // Full-size cubes to eliminate gaps
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x00aaff,
+          roughness: 0.4,
+          metalness: 0.1
+        });
+
+        // First find the center of the shape
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        voxels.forEach(([x, y, z]) => {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          minZ = Math.min(minZ, z);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+          maxZ = Math.max(maxZ, z);
+        });
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const centerZ = (minZ + maxZ) / 2;
+
+        voxels.forEach(([x, y, z]) => {
+          const cube = new THREE.Mesh(geometry, material.clone());
+          // Position cubes relative to the actual center of the shape
+          cube.position.set(
+            x - centerX,
+            y - centerY,
+            z - centerZ
+          );
+          group.add(cube);
+        });
+      } else {
+        // Show a small red cube as fallback
+        const geometry = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+        const material = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+          roughness: 0.4,
+          metalness: 0.1
+        });
+        const cube = new THREE.Mesh(geometry, material);
+        group.add(cube);
+        console.log(`No voxels for ${containerId}, showing fallback cube`);
+      }
+
+      // Apply random rotation if needed
+      if (randomRotate) {
+        const rx = Math.random() * Math.PI * 2;
+        const ry = Math.random() * Math.PI * 2;
+        const rz = Math.random() * Math.PI * 2;
+        group.rotation.set(rx, ry, rz);
+        // Store initial orientation for angular disparity computation
+        if (window.interactionTracker[containerId]) {
+          window.interactionTracker[containerId].initialOrientation = { x: rx, y: ry, z: rz };
+        }
+      }
+
+      // Add group to scene
+      scene.add(group);
+
+      // Add controls (disabled in perspective mode)
+      if (!options.disableControls) {
+        const controls = new TrackballControls(camera, renderer.domElement);
+        controls.rotateSpeed = 2.0;
+        controls.zoomSpeed = 1.2;
+        controls.panSpeed = 0.8;
+        // On phones the cells are tiny — pinch-zoom and two-finger pan just
+        // push the shape off-frame and there is no room to recover. Lock
+        // them down and let the user only rotate.
+        if (window.innerWidth <= 640) {
+          controls.noZoom = true;
+          controls.noPan = true;
+        }
+
+        // Hook TrackballControls events for interaction tracking
+        const tracker = window.interactionTracker[containerId];
+        if (tracker) {
+          tracker._lastQuaternion = camera.quaternion.clone();
+
+          controls.addEventListener('start', () => {
+            tracker._interactionStartTime = performance.now();
+            if (!tracker.firstInteractionTime) tracker.firstInteractionTime = Date.now();
+            // TrackballControls._state: 0=ROTATE, 1=ZOOM, 2=PAN
+            const state = controls._state;
+            if (state === 0) { tracker._currentAction = 'rotate'; tracker.rotationEvents++; }
+            else if (state === 1) { tracker._currentAction = 'zoom'; tracker.zoomEvents++; }
+            else if (state === 2) { tracker._currentAction = 'pan'; tracker.panEvents++; }
+          });
+
+          controls.addEventListener('change', () => {
+            tracker.lastInteractionTime = Date.now();
+            if (tracker._lastQuaternion && tracker._currentAction === 'rotate') {
+              const dot = Math.abs(camera.quaternion.dot(tracker._lastQuaternion));
+              const delta = 2 * Math.acos(Math.min(1, dot)) * (180 / Math.PI);
+              if (delta > 0.1) tracker.totalAngularDisplacement += delta;
+            }
+            tracker._lastQuaternion = camera.quaternion.clone();
+          });
+
+          controls.addEventListener('end', () => {
+            if (tracker._interactionStartTime) {
+              tracker.totalInteractionTime += performance.now() - tracker._interactionStartTime;
+              tracker._interactionStartTime = null;
+            }
+            tracker._currentAction = null;
+          });
+        }
+
+        function animate() {
+          requestAnimationFrame(animate);
+          controls.update();
+          renderer.render(scene, camera);
+        }
+        animate();
+      } else {
+        // Perspective mode: static render, no user interaction
+        function animate() {
+          requestAnimationFrame(animate);
+          renderer.render(scene, camera);
+        }
+        animate();
+      }
+      console.log(`Rendering complete for ${containerId}`);
+    }
+
+    // Do automatic rendering check on page load
+    window.addEventListener('load', function () {
+      // NOTE: a legacy 1-second auto-retry used to re-call loadQuestion() if
+      // the target container was still empty. On slow backends (e.g. Replit's
+      // 0.5 vCPU) the first shape generation exceeds 1 s, so the retry fired
+      // mid-request and replaced the user's visible question with a new one.
+      // Removed — loadQuestion()'s own error handling is sufficient.
+
+      // IMPORTANT: Set up direct click handlers for builder buttons with robust error handling
+      function setupBuilderButtons() {
+        console.log("Setting up builder button handlers");
+
+        try {
+          // Reset button handler
+          const resetBtn = document.getElementById('reset-builder-btn');
+          if (resetBtn) {
+            console.log("Found reset button, adding click handler");
+
+            // Remove any existing event listeners to prevent duplicates
+            const newResetBtn = resetBtn.cloneNode(true);
+            resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
+
+            // Add new event listener
+            newResetBtn.addEventListener('click', function (e) {
+              console.log("Reset button clicked");
+              e.preventDefault();
+              try {
+                if (typeof window.resetBuilder === 'function') {
+                  window.resetBuilder();
+                } else {
+                  console.error("resetBuilder function not found");
+                  alert("Reset function is not available. Please refresh the page.");
+                }
+              } catch (err) {
+                console.error("Error in reset button handler:", err);
+                alert("Error resetting builder: " + err.message);
+              }
+            });
+          } else {
+            console.error("Reset button not found in DOM");
+          }
+
+          // Check button handler
+          const checkBtn = document.getElementById('check-builder-btn');
+          if (checkBtn) {
+            console.log("Found check button, adding click handler");
+
+            // Remove any existing event listeners to prevent duplicates
+            const newCheckBtn = checkBtn.cloneNode(true);
+            checkBtn.parentNode.replaceChild(newCheckBtn, checkBtn);
+
+            // Add new event listener
+            newCheckBtn.addEventListener('click', function (e) {
+              console.log("Check button clicked");
+              e.preventDefault();
+              try {
+                if (typeof window.checkBuilder === 'function') {
+                  window.checkBuilder();
+                } else {
+                  console.error("checkBuilder function not found");
+                  alert("Check function is not available. Please refresh the page.");
+                }
+              } catch (err) {
+                console.error("Error in check button handler:", err);
+                alert("Error checking builder: " + err.message);
+              }
+            });
+          } else {
+            console.error("Check button not found in DOM");
+          }
+
+          // Mode buttons
+          const addModeBtn = document.getElementById('add-mode-btn');
+          if (addModeBtn) {
+            console.log("Found add mode button, adding click handler");
+
+            // Remove any existing event listeners to prevent duplicates
+            const newAddModeBtn = addModeBtn.cloneNode(true);
+            addModeBtn.parentNode.replaceChild(newAddModeBtn, addModeBtn);
+
+            // Add new event listener
+            newAddModeBtn.addEventListener('click', function (e) {
+              console.log("Add mode button clicked");
+              e.preventDefault();
+              try {
+                if (typeof window.setBuilderMode === 'function') {
+                  window.setBuilderMode('add');
+                } else {
+                  console.error("setBuilderMode function not found");
+                }
+              } catch (err) {
+                console.error("Error in add mode button handler:", err);
+              }
+            });
+          }
+
+          const removeModeBtn = document.getElementById('remove-mode-btn');
+          if (removeModeBtn) {
+            console.log("Found remove mode button, adding click handler");
+
+            // Remove any existing event listeners to prevent duplicates
+            const newRemoveModeBtn = removeModeBtn.cloneNode(true);
+            removeModeBtn.parentNode.replaceChild(newRemoveModeBtn, removeModeBtn);
+
+            // Add new event listener
+            newRemoveModeBtn.addEventListener('click', function (e) {
+              console.log("Remove mode button clicked");
+              e.preventDefault();
+              try {
+                if (typeof window.setBuilderMode === 'function') {
+                  window.setBuilderMode('remove');
+                } else {
+                  console.error("setBuilderMode function not found");
+                }
+              } catch (err) {
+                console.error("Error in remove mode button handler:", err);
+              }
+            });
+          }
+
+          console.log("Builder button setup complete");
+        } catch (error) {
+          console.error("Error setting up builder buttons:", error);
+        }
+      }
+
+      // Run button setup immediately
+      setupBuilderButtons();
+
+      // Also run it again after a delay to ensure it catches buttons after Builder mode is initialized
+      setTimeout(setupBuilderButtons, 2000);
+    });
+
+    // Instructions modal functions
+    window.showInstructions = function () {
+      document.getElementById('instructions-modal').style.display = 'block';
+      // Default to recognition tab
+      showTab('recognition');
+    };
+
+    window.closeInstructions = function () {
+      document.getElementById('instructions-modal').style.display = 'none';
+    };
+
+    window.showTab = function (tabName) {
+      // Hide all content first
+      document.getElementById('recognition-content').style.display = 'none';
+      document.getElementById('builder-content').style.display = 'none';
+
+      // Remove active class from all tabs
+      document.getElementById('recognition-tab').style.background = '#ddd';
+      document.getElementById('recognition-tab').style.color = '#333';
+      document.getElementById('builder-tab').style.background = '#ddd';
+      document.getElementById('builder-tab').style.color = '#333';
+
+      // Show the selected content and highlight the tab
+      document.getElementById(tabName + '-content').style.display = 'block';
+      document.getElementById(tabName + '-tab').style.background = '#007acc';
+      document.getElementById(tabName + '-tab').style.color = 'white';
+    };
+
+    // Mode switching functions
+    window.switchToBuilderMode = function () {
+      try {
+        console.log("Switching to builder mode");
+
+        // First, ensure DOM elements exist
+        const gameArea = document.getElementById('game-area');
+        const builderArea = document.getElementById('builder-area');
+
+        if (!gameArea || !builderArea) {
+          console.error("Missing required DOM elements:",
+            gameArea ? "Game area OK" : "Missing game area",
+            builderArea ? "Builder area OK" : "Missing builder area");
+
+          // Try to recover by initializing anyway
+          if (builderArea) {
+            builderArea.style.display = 'block';
+          }
+        } else {
+          gameArea.style.display = 'none';
+          builderArea.style.display = 'block';
+        }
+
+        // Builder mode wants header + mode-nav visible; clear the focused
+        // MC body classes so they're never lingering.
+        document.body.classList.remove('mc-active', 'mc-settings-open');
+
+        // Update button styles
+        const recognitionBtn = document.getElementById('recognition-mode-btn');
+        const builderBtn = document.getElementById('builder-mode-btn');
+
+        if (recognitionBtn && builderBtn) {
+          recognitionBtn.style.background = '#888';
+          builderBtn.style.background = '#007acc';
+        }
+
+        // Store preference
+        localStorage.setItem('mindfold3d-preferred-mode', 'builder');
+
+        // Initialize builder - with a short delay to ensure DOM is ready
+        setTimeout(() => {
+          if (typeof window.initializeBuilder === 'function') {
+            window.initializeBuilder();
+
+            // Set up event listeners for builder buttons
+            setTimeout(() => {
+              try {
+                const resetBtn = document.getElementById('reset-builder-btn');
+                if (resetBtn) {
+                  console.log("Re-attaching reset button handler after mode switch");
+                  resetBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    console.log("Reset button clicked after mode switch");
+                    window.resetBuilder();
+                  });
+                }
+
+                const checkBtn = document.getElementById('check-builder-btn');
+                if (checkBtn) {
+                  console.log("Re-attaching check button handler after mode switch");
+                  checkBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    console.log("Check button clicked after mode switch");
+                    window.checkBuilder();
+                  });
+                }
+              } catch (err) {
+                console.error("Error setting up builder buttons after mode switch:", err);
+              }
+            }, 500);
+          } else {
+            console.error("Builder initialization function not found");
+            alert("Error: Builder functionality not available. Please refresh the page.");
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Error switching to builder mode:", error);
+        alert("Error switching to builder mode. Please refresh the page.");
+      }
+    };
+
+    /* Toggle the inline advanced-settings panel on phones. The CSS
+       at @media (max-width: 640px) hides #task-settings when
+       body.mc-active is set unless body.mc-settings-open is also set. */
+    window.toggleMcSettings = function () {
+      document.body.classList.toggle('mc-settings-open');
+    };
+
+    window.switchToRecognitionMode = function () {
+      document.getElementById('builder-area').style.display = 'none';
+      // game-area uses CSS grid for fit-to-viewport layout - 'block' here
+      // would override the grid template and collapse the target row.
+      document.getElementById('game-area').style.display = 'grid';
+      // Mark body so the phone CSS can hide secondary chrome (header,
+      // mode-nav, h2) and tuck advanced settings behind a gear button.
+      document.body.classList.add('mc-active');
+      // Settings panel starts collapsed every time we re-enter MC mode.
+      document.body.classList.remove('mc-settings-open');
+
+      // Update button styles
+      document.getElementById('builder-mode-btn').style.background = '#888';
+      document.getElementById('recognition-mode-btn').style.background = '#007acc';
+
+      // Store preference
+      localStorage.setItem('mindfold3d-preferred-mode', 'recognition');
+
+      // Reload a question
+      loadQuestion();
+    };
+
+    // Make functions globally accessible for HTML onclick attributes
+    window.addEventListener('load', function () {
+      console.log("Registering global function references");
+
+      // Create proper global function references for HTML attributes
+      window.resetBuilder = window.resetBuilder || function () { console.error("resetBuilder not defined"); };
+      window.checkBuilder = window.checkBuilder || function () { console.error("checkBuilder not defined"); };
+      window.setBuilderMode = window.setBuilderMode || function () { console.error("setBuilderMode not defined"); };
+      window.showInstructions = window.showInstructions || function () { console.error("showInstructions not defined"); };
+      window.closeInstructions = window.closeInstructions || function () { console.error("closeInstructions not defined"); };
+      window.showTab = window.showTab || function () { console.error("showTab not defined"); };
+
+      // Explicitly assign to global scope
+      this.resetBuilder = window.resetBuilder;
+      this.checkBuilder = window.checkBuilder;
+      this.setBuilderMode = window.setBuilderMode;
+      this.showInstructions = window.showInstructions;
+      this.closeInstructions = window.closeInstructions;
+      this.showTab = window.showTab;
+    });
+
+    // --- STRUCTURE BUILDER LOGIC ---
+    // Add builder mode state
+    window.builderMode = 'add'; // 'add' or 'remove'
+
+    // Explicitly set the builder mode
+    window.setBuilderMode = function (mode) {
+      // Store the old mode for logging
+      const oldMode = window.builderMode;
+
+      // Set the new mode
+      window.builderMode = mode;
+
+      // Update button appearances
+      const addBtn = document.getElementById('add-mode-btn');
+      const removeBtn = document.getElementById('remove-mode-btn');
+
+      if (!addBtn || !removeBtn) {
+        console.error("Cannot find mode buttons!");
+        return;
+      }
+
+      if (mode === 'add') {
+        // Highlight add button
+        addBtn.style.background = '#007acc';
+        removeBtn.style.background = '#888';
+      } else {
+        // Highlight remove button
+        addBtn.style.background = '#888';
+        removeBtn.style.background = '#cc0033';
+      }
+
+      console.log(`Mode changed from ${oldMode} to ${mode}`);
+    }
+
+    // Generate random target structure - simplified version for reliability
+    function generateRandomTargetVoxels(gridSize, minVoxels = 3, maxVoxels = 7) {
+      console.log("Generating random target structure");
+
+      try {
+        // Start with a single voxel at center (0,0,0)
+        const voxels = [[0, 0, 0]];
+        const voxelSet = new Set(["0,0,0"]);
+
+        // Define all possible directions to grow
+        const directions = [
+          [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+        ];
+
+        // Determine number of voxels to add (smaller range for reliability)
+        const targetCount = Math.max(2, Math.min(Math.floor(Math.random() * (maxVoxels - minVoxels + 1)) + minVoxels, 8));
+        console.log("Target voxel count:", targetCount);
+
+        // Simple algorithm: for each step, pick a random existing voxel and try to add a neighbor
+        let attempts = 0;
+        const maxAttempts = 100; // Prevent infinite loops
+
+        while (voxels.length < targetCount && attempts < maxAttempts) {
+          attempts++;
+
+          // Pick a random existing voxel
+          const baseVoxel = voxels[Math.floor(Math.random() * voxels.length)];
+
+          // Pick a random direction
+          const dir = directions[Math.floor(Math.random() * directions.length)];
+
+          // Create new voxel
+          const newVoxel = [
+            baseVoxel[0] + dir[0],
+            baseVoxel[1] + dir[1],
+            baseVoxel[2] + dir[2]
+          ];
+
+          // Check if within bounds
+          const limit = Math.floor(gridSize / 2) - 1;
+          if (Math.abs(newVoxel[0]) <= limit &&
+            Math.abs(newVoxel[1]) <= limit &&
+            Math.abs(newVoxel[2]) <= limit) {
+
+            // Check if this position is already filled
+            const key = newVoxel.join(',');
+            if (!voxelSet.has(key)) {
+              voxels.push(newVoxel);
+              voxelSet.add(key);
+              console.log("Added voxel:", newVoxel);
+            }
+          }
+        }
+
+        console.log(`Generated ${voxels.length} voxels in ${attempts} attempts`);
+
+        // Ensure we return at least 2 voxels for visibility
+        if (voxels.length < 2) {
+          voxels.push([1, 0, 0]);
+          console.log("Added an extra voxel because structure was too small");
+        }
+
+        return voxels;
+      } catch (error) {
+        console.error("Error in voxel generation:", error);
+        return [[0, 0, 0], [1, 0, 0]]; // Fallback to a simple 2-block shape
+      }
+    }
+
+    // Add coordinate axes helper
+    function addCoordinateAxes(scene, gridSize) {
+      const axisLength = gridSize / 2 + 0.5;
+
+      // X axis - red
+      const xAxisGeometry = new THREE.CylinderGeometry(0.05, 0.05, axisLength, 8);
+      const xAxisMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      const xAxis = new THREE.Mesh(xAxisGeometry, xAxisMaterial);
+      xAxis.rotation.z = -Math.PI / 2;
+      xAxis.position.x = axisLength / 2 - 0.5;
+      scene.add(xAxis);
+
+      // Y axis - green
+      const yAxisGeometry = new THREE.CylinderGeometry(0.05, 0.05, axisLength, 8);
+      const yAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const yAxis = new THREE.Mesh(yAxisGeometry, yAxisMaterial);
+      yAxis.position.y = axisLength / 2 - 0.5;
+      scene.add(yAxis);
+
+      // Z axis - blue
+      const zAxisGeometry = new THREE.CylinderGeometry(0.05, 0.05, axisLength, 8);
+      const zAxisMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+      const zAxis = new THREE.Mesh(zAxisGeometry, zAxisMaterial);
+      xAxis.rotation.x = Math.PI / 2;
+      zAxis.rotation.x = Math.PI / 2;
+      zAxis.position.z = axisLength / 2 - 0.5;
+      scene.add(zAxis);
+    }
+
+    // Add center indicator
+    function addCenterIndicator(scene) {
+      const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      const sphere = new THREE.Mesh(geometry, material);
+      sphere.position.set(0, 0, 0);
+      scene.add(sphere);
+    }
+
+    // Initialize the builder scene
+    window.initializeBuilder = function () {
+      console.log("Initializing builder mode");
+
+      // Preload sound effects
+      const correctSound = document.getElementById('sound-correct');
+      const wrongSound = document.getElementById('sound-wrong');
+
+      if (correctSound) correctSound.load();
+      if (wrongSound) wrongSound.load();
+
+      const gridSize = 7;
+
+      try {
+        // Generate target structure
+        const targetVoxels = generateRandomTargetVoxels(gridSize);
+        console.log("Generated target voxels:", targetVoxels);
+
+        // Ensure we have at least one voxel
+        if (!targetVoxels || targetVoxels.length === 0) {
+          console.error("No target voxels generated, using fallback");
+          targetVoxels = [[0, 0, 0]]; // Fallback to a single cube
+        }
+
+        // Force clear builderScenes to ensure complete re-initialization
+        window.builderScenes = {};
+
+        // Render the target scene
+        renderBuilderScene('builder-target', targetVoxels, gridSize, false);
+
+        // Workspace: single cube at center
+        const center = [0, 0, 0];
+        window.builderVoxels = [center];
+        renderBuilderScene('builder-workspace', window.builderVoxels, gridSize, true);
+
+        // Reset to add mode
+        window.builderMode = 'add';
+
+        // Ensure mode buttons are properly set up
+        const addBtn = document.getElementById('add-mode-btn');
+        const removeBtn = document.getElementById('remove-mode-btn');
+
+        if (addBtn && removeBtn) {
+          // Set initial button states
+          addBtn.style.background = '#007acc'; // Highlight add button
+          removeBtn.style.background = '#888';  // Dim remove button
+
+          console.log("Builder mode buttons initialized");
+        } else {
+          console.error("Could not find builder mode buttons");
+        }
+
+        console.log("Builder initialization complete");
+      } catch (error) {
+        console.error("Error initializing builder:", error);
+        alert("There was an error initializing the builder. Please refresh the page.");
+      }
+    };
+
+    // Store references to scene objects
+    window.builderScenes = {};
+
+    // Render a builder scene
+    function renderBuilderScene(containerId, voxels, gridSize, isWorkspace) {
+      console.log(`Rendering builder scene for ${containerId} with ${voxels ? voxels.length : 0} voxels`);
+
+      try {
+        const container = document.getElementById(containerId);
+        if (!container) {
+          console.error(`Container #${containerId} not found!`);
+          return;
+        }
+
+        // Validate voxels input
+        if (!voxels || !Array.isArray(voxels) || voxels.length === 0) {
+          console.error(`Invalid voxels data for ${containerId}:`, voxels);
+          voxels = [[0, 0, 0]]; // Fallback to a single cube at origin
+        }
+
+        // Check if we already have a scene for this container
+        if (window.builderScenes[containerId] && isWorkspace) {
+          // Just update the existing scene with new voxels
+          updateBuilderVoxels(containerId, voxels, gridSize);
+          return;
+        }
+
+        // Clear and create new scene
+        container.innerHTML = '';
+
+        // Set up scene, camera, renderer
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+
+        const aspect = container.clientWidth / container.clientHeight;
+        const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+
+        // Builder mode uses a more zoomed-in view for better detail
+        if (containerId.includes('builder')) {
+          // Keep the builder zoomed in for better visibility
+          camera.position.set(7, 7, 7); // Zoomed in for builder view
+        } else {
+          // Default position
+          camera.position.set(10, 10, 10);
+        }
+
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+
+        // Add controls
+        const controls = new TrackballControls(camera, renderer.domElement);
+        controls.rotateSpeed = 3.0;
+        controls.zoomSpeed = 1.2;
+        controls.panSpeed = 0.8;
+        controls.noZoom = false;
+        controls.noPan = true;
+        controls.staticMoving = false;
+        controls.dynamicDampingFactor = 0.15;
+        controls.minDistance = 3;  // Allow closer zoom
+        controls.maxDistance = 30;
+
+        // Add lighting
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Slightly brighter
+        scene.add(ambient);
+
+        const light = new THREE.DirectionalLight(0xffffff, 0.9); // Slightly brighter
+        light.position.set(5, 5, 5);
+        scene.add(light);
+
+        // Create a group for the shape
+        const group = new THREE.Group();
+        scene.add(group);
+
+        // Add grid to show XZ plane
+        const gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x888888, 0x444444);
+        gridHelper.position.y = -0.01; // Slightly below the bottom face
+        scene.add(gridHelper);
+
+        // Add coordinate axes and center indicator
+        addCoordinateAxes(scene, gridSize);
+        addCenterIndicator(scene);
+
+        // Store references for later use
+        window.builderScenes[containerId] = {
+          scene: scene,
+          camera: camera,
+          renderer: renderer,
+          controls: controls,
+          group: group,
+          gridSize: gridSize
+        };
+
+        console.log(`Adding ${voxels.length} voxels to scene ${containerId}`);
+
+        // Add initial voxels
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        voxels.forEach(([x, y, z]) => {
+          // Use more vibrant colors to ensure visibility
+          const material = new THREE.MeshStandardMaterial({
+            color: isWorkspace ? 0x00aaff : 0xff6600,
+            opacity: 0.95,  // More opaque
+            transparent: true,
+            roughness: 0.3,  // More shiny
+            metalness: 0.2   // Slight metallic effect
+          });
+          const cube = new THREE.Mesh(geometry, material);
+          // Position cubes at their grid coordinates
+          cube.position.set(x, y, z);
+          if (isWorkspace) {
+            cube.userData.grid = [x, y, z];
+            cube.userData.id = `voxel-${x}-${y}-${z}`;
+          }
+          group.add(cube);
+          console.log(`Added voxel at (${x},${y},${z}) to ${containerId}`);
+        });
+
+        // Add interaction for workspace
+        if (isWorkspace) {
+          setupBuilderInteraction(containerId, gridSize);
+        }
+
+        // Start animation loop
+        function animate() {
+          requestAnimationFrame(animate);
+          controls.update();
+          renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+          camera.aspect = container.clientWidth / container.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        console.log(`Finished rendering scene for ${containerId}`);
+      } catch (error) {
+        console.error(`Error rendering builder scene for ${containerId}:`, error);
+        alert(`Error rendering builder scene. Please try again or refresh the page.`);
+      }
+    }
+
+    // Update voxels without recreating the scene
+    function updateBuilderVoxels(containerId, voxels, gridSize) {
+      const sceneData = window.builderScenes[containerId];
+      if (!sceneData) return; // Scene not initialized yet
+
+      const group = sceneData.group;
+
+      // Create lookup set of current voxels for fast checking
+      const currentVoxelSet = new Set();
+      voxels.forEach(voxel => currentVoxelSet.add(`${voxel[0]},${voxel[1]},${voxel[2]}`));
+
+      // First, remove voxels that are no longer in the list
+      const toRemove = [];
+      group.children.forEach(child => {
+        if (child.userData && child.userData.grid) {
+          const [x, y, z] = child.userData.grid;
+          const key = `${x},${y},${z}`;
+          if (!currentVoxelSet.has(key)) {
+            toRemove.push(child);
+          }
+        }
+      });
+
+      // Remove objects from group
+      toRemove.forEach(obj => group.remove(obj));
+
+      // Add new voxels that don't exist yet
+      const existingVoxelSet = new Set();
+      group.children.forEach(child => {
+        if (child.userData && child.userData.grid) {
+          const [x, y, z] = child.userData.grid;
+          existingVoxelSet.add(`${x},${y},${z}`);
+        }
+      });
+
+      // Create new geometry only once
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+      // Add missing voxels
+      voxels.forEach(([x, y, z]) => {
+        const key = `${x},${y},${z}`;
+        if (!existingVoxelSet.has(key)) {
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x00aaff,
+            opacity: 0.8,
+            transparent: true
+          });
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.set(x, y, z);
+          cube.userData.grid = [x, y, z];
+          cube.userData.id = `voxel-${x}-${y}-${z}`;
+          group.add(cube);
+        }
+      });
+    }
+
+    // Setup interaction for builder workspace
+    function setupBuilderInteraction(containerId, gridSize) {
+      const sceneData = window.builderScenes[containerId];
+      if (!sceneData) return;
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      const renderer = sceneData.renderer;
+      const camera = sceneData.camera;
+      const group = sceneData.group;
+
+      renderer.domElement.addEventListener('click', function (event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(group.children);
+
+        if (intersects.length > 0) {
+          const clicked = intersects[0].object;
+
+          if (window.builderMode === 'add') {
+            // Add cube logic
+            const face = intersects[0].face;
+
+            // Get the normal in world space
+            const normal = face.normal.clone();
+            normal.transformDirection(clicked.matrixWorld);
+
+            // Get the position of the clicked cube
+            const [x, y, z] = clicked.userData.grid;
+
+            // Calculate new position by adding the normal vector
+            const nx = x + Math.round(normal.x);
+            const ny = y + Math.round(normal.y);
+            const nz = z + Math.round(normal.z);
+
+            // Define reasonable bounds for the grid
+            const minBound = -Math.floor(gridSize / 2);
+            const maxBound = Math.floor(gridSize / 2);
+
+            // Check bounds
+            if (nx >= minBound && nx <= maxBound &&
+              ny >= minBound && ny <= maxBound &&
+              nz >= minBound && nz <= maxBound) {
+
+              // Check if already occupied
+              if (!window.builderVoxels.some(([vx, vy, vz]) => vx === nx && vy === ny && vz === nz)) {
+                // Add new voxel
+                window.builderVoxels.push([nx, ny, nz]);
+                // Update the scene
+                updateBuilderVoxels(containerId, window.builderVoxels, gridSize);
+              }
+            }
+          } else if (window.builderMode === 'remove') {
+            // Remove cube logic
+            const [x, y, z] = clicked.userData.grid;
+
+            // Make sure we keep at least one voxel
+            if (window.builderVoxels.length > 1) {
+              // Filter out the clicked voxel
+              window.builderVoxels = window.builderVoxels.filter(
+                ([vx, vy, vz]) => !(vx === x && vy === y && vz === z)
+              );
+              // Update the scene
+              updateBuilderVoxels(containerId, window.builderVoxels, gridSize);
+            }
+          }
+        }
+      });
+    }
+
+    // Reset builder to initial state
+    window.resetBuilder = function () {
+      console.log("Reset builder function called");
+
+      try {
+        // Reset workspace to a single cube
+        window.builderVoxels = [[0, 0, 0]]; // Center cube
+
+        if (window.builderScenes && window.builderScenes['builder-workspace']) {
+          console.log("Updating existing builder scene");
+          updateBuilderVoxels('builder-workspace', window.builderVoxels, 7);
+        } else {
+          console.log("Initializing builder from reset");
+          // If scene doesn't exist yet, initialize the builder
+          window.initializeBuilder();
+        }
+      } catch (error) {
+        console.error("Error in resetBuilder:", error);
+        alert("There was an error resetting the builder. Please try again.");
+      }
+    };
+
+    // Export the resetBuilder to the global scope
+    window.resetBuilderGlobal = function () {
+      console.log("Global resetBuilder called via dedicated function");
+      window.resetBuilder();
+    }
+
+    // Make sure there's a global function that can be called from HTML
+    function resetBuilder() {
+      console.log("Global resetBuilder called via HTML");
+      if (typeof window.resetBuilder === 'function') {
+        window.resetBuilder();
+      } else {
+        console.error("window.resetBuilder is not defined");
+        alert("Reset function not available. Please refresh the page.");
+      }
+    }
+
+    // Check if the built shape matches the target
+    window.checkBuilder = function () {
+      console.log("Check builder function called");
+
+      if (!window.builderScenes) {
+        console.error("Builder scenes not initialized");
+        alert("Error: Builder not properly initialized");
+        return;
+      }
+
+      const targetScene = window.builderScenes['builder-target'];
+      const workspaceScene = window.builderScenes['builder-workspace'];
+
+      if (!targetScene || !workspaceScene) {
+        console.error("Target or workspace scene missing:",
+          targetScene ? "Target OK" : "Target missing",
+          workspaceScene ? "Workspace OK" : "Workspace missing");
+        alert("Error: Builder not properly initialized");
+        return;
+      }
+
+      // Get target voxels from scene
+      const targetVoxels = [];
+      targetScene.group.children.forEach(child => {
+        if (child.type === 'Mesh' && child.geometry.type === 'BoxGeometry') {
+          const pos = child.position;
+          targetVoxels.push([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)]);
+        }
+      });
+
+      // Get workspace voxels
+      const workspaceVoxels = window.builderVoxels;
+
+      // Create sets for comparison (normalize coordinates first)
+      const targetSet = new Set(targetVoxels.map(v => v.join(',')));
+      const workspaceSet = new Set(workspaceVoxels.map(v => v.join(',')));
+
+      // Function to create and show the result popup
+      function showResultPopup(isCorrect, message) {
+        // Create popup container if it doesn't exist
+        let popup = document.getElementById('builder-result-popup');
+        if (!popup) {
+          popup = document.createElement('div');
+          popup.id = 'builder-result-popup';
+          popup.style.position = 'fixed';
+          popup.style.top = '50%';
+          popup.style.left = '50%';
+          popup.style.transform = 'translate(-50%, -50%)';
+          popup.style.backgroundColor = 'white';
+          popup.style.padding = '20px';
+          popup.style.borderRadius = '8px';
+          popup.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+          popup.style.zIndex = '2000';
+          popup.style.maxWidth = '80%';
+          popup.style.textAlign = 'center';
+          document.body.appendChild(popup);
+        }
+
+        // Create overlay
+        let overlay = document.getElementById('builder-result-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'builder-result-overlay';
+          overlay.style.position = 'fixed';
+          overlay.style.top = '0';
+          overlay.style.left = '0';
+          overlay.style.width = '100%';
+          overlay.style.height = '100%';
+          overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+          overlay.style.zIndex = '1999';
+          document.body.appendChild(overlay);
+        }
+
+        // Set content
+        popup.innerHTML = `
+          <div style="font-size: 36px; margin-bottom: 10px;">${isCorrect ? '✅' : '❌'}</div>
+          <div style="font-size: 18px; font-weight: bold; margin-bottom: 15px; color: ${isCorrect ? '#006600' : '#cc0000'};">${message}</div>
+          <button id="popup-ok-button" style="background: ${isCorrect ? '#00cc66' : '#007acc'}; color: white; border: none; padding: 8px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 16px;">OK</button>
+        `;
+
+        // Show popup and overlay
+        popup.style.display = 'block';
+        overlay.style.display = 'block';
+
+        // Add click handler to close button
+        document.getElementById('popup-ok-button').addEventListener('click', function () {
+          popup.style.display = 'none';
+          overlay.style.display = 'none';
+
+          // If correct, generate a new target after closing
+          if (isCorrect) {
+            window.initializeBuilder();
+          }
+        });
+
+        // Also allow clicking outside to close
+        overlay.addEventListener('click', function () {
+          popup.style.display = 'none';
+          overlay.style.display = 'none';
+
+          // If correct, generate a new target after closing
+          if (isCorrect) {
+            window.initializeBuilder();
+          }
+        });
+      }
+
+      // Check if the same number of voxels
+      if (targetVoxels.length !== workspaceVoxels.length) {
+        const message = `Incorrect: Your shape has ${workspaceVoxels.length} cubes, but the target has ${targetVoxels.length}`;
+        showResultPopup(false, message);
+
+        // Play wrong sound
+        const wrongSound = document.getElementById('sound-wrong');
+        if (wrongSound) wrongSound.play().catch(e => console.error("Failed to play sound:", e));
+        return;
+      }
+
+      // Check if all positions match
+      let allMatch = true;
+      for (const voxel of targetVoxels) {
+        const key = voxel.join(',');
+        if (!workspaceSet.has(key)) {
+          allMatch = false;
+          break;
+        }
+      }
+
+      if (allMatch) {
+        const message = 'Correct! Your shape matches the target.';
+        showResultPopup(true, message);
+
+        // Play correct sound
+        const correctSound = document.getElementById('sound-correct');
+        if (correctSound) correctSound.play().catch(e => console.error("Failed to play sound:", e));
+
+        // Show confetti animation
+        try {
+          if (typeof confetti === 'function') {
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42']
+            });
+            console.log("Confetti animation triggered");
+          } else {
+            console.error("Confetti function not available");
+          }
+        } catch (e) {
+          console.error("Error triggering confetti:", e);
+        }
+      } else {
+        const message = 'Incorrect: The arrangement does not match the target.';
+        showResultPopup(false, message);
+
+        // Play wrong sound
+        const wrongSound = document.getElementById('sound-wrong');
+        if (wrongSound) wrongSound.play().catch(e => console.error("Failed to play sound:", e));
+      }
+    };
+
+    // Define direct global function to ensure it's accessible from HTML
+    function checkBuilder() {
+      console.log("Global checkBuilder called");
+      window.checkBuilder();
+    }
+
+    // Make sure selectChoice is globally accessible
+    function selectChoice(choiceId, targetId) {
+      console.log("Global selectChoice called", choiceId, targetId);
+      window.selectChoice(choiceId, targetId);
+    }
+
+  </script>
+</body>
+
+</html>

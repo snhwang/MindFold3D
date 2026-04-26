@@ -1,0 +1,4 @@
+# Core dependencies (none required for basic usage)
+
+# Optional: Database storage
+# sqlalchemy>=2.0
