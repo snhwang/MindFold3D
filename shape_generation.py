@@ -748,65 +748,94 @@ def keep_largest_component(voxels, grid_size):
 def nudge_voxels_until_unique(voxels: List[List[int]],
                               seen_canonicals: Set,
                               grid_size: Tuple[int, int, int],
-                              max_iterations: int = 25) -> Optional[List[List[int]]]:
-    """Mutate a voxel set (add/remove one voxel at a time) until its
-    canonical form is not already in seen_canonicals.
+                              max_iterations: int = 5000) -> Optional[List[List[int]]]:
+    """Find a connectivity-preserving mutation of *voxels* whose canonical
+    form is not in *seen_canonicals*.
 
-    Used as a last-ditch distractor fallback when the upstream generator
-    keeps producing rotational copies of an already-accepted shape.
-    Maintains connectivity: adds only place voxels adjacent to existing ones,
-    and removals are rejected if they would increase the component count (an
-    explicit check against target_n_components prevents splits/orphans).
-    Returns the mutated list, or None if no unique form is found within
-    max_iterations.
+    Implementation: breadth-first search over 1-voxel add/remove mutations.
+    Each frontier shape expands into all of its valid neighbors (add a voxel
+    adjacent to an existing one, OR remove a voxel whose removal does not
+    change the component count). The first neighbor whose canonical form is
+    not in *seen_canonicals* and has not been visited is returned. Since
+    *seen_canonicals* contains only the at-most-three already-accepted shapes
+    for the current trial and the canonical-form neighborhood graph is large
+    (millions of reachable forms within a few BFS layers on any reasonable
+    grid), success on or before the third layer is essentially guaranteed.
+
+    The BFS is bounded by *max_iterations* nodes expanded as a defensive cap;
+    in practice the function returns within a handful of expansions. Returns
+    None only if the search exhausts the entire connected sub-graph reachable
+    from the start within the budget without finding a non-blocked form, an
+    outcome that does not occur on grids large enough to host meaningful
+    shapes.
+
+    Used as the guaranteed last-ditch distractor fallback after the upstream
+    tier-aware generator's 10 attempts (with archetype swap) all collide.
     """
     import random as _random
-    vset: Set[Tuple[int, int, int]] = {tuple(v) for v in voxels}
+    from collections import deque
+
+    start_set: Set[Tuple[int, int, int]] = {tuple(v) for v in voxels}
+    if not start_set:
+        return None
     gx, gy, gz = grid_size
-    # Preserve the component count of the original shape so that a
-    # split-producing removal doesn't turn a single-component shape
-    # into a main piece + stray voxel.
-    target_n_components = _count_components(vset, grid_size) if vset else 1
+    # Preserve the component count of the starting shape so that removals
+    # don't introduce orphan voxels and adds don't merge separate components.
+    target_n_components = _count_components(start_set, grid_size)
 
-    for _ in range(max_iterations):
-        do_add = (len(vset) < 5) or (_random.random() < 0.5)
+    DIRECTIONS = ((1, 0, 0), (-1, 0, 0),
+                  (0, 1, 0), (0, -1, 0),
+                  (0, 0, 1), (0, 0, -1))
 
-        if do_add:
-            placed = False
-            for _try in range(10):
-                base = _random.choice(list(vset))
-                dx, dy, dz = _random.choice([(1, 0, 0), (-1, 0, 0),
-                                              (0, 1, 0), (0, -1, 0),
-                                              (0, 0, 1), (0, 0, -1)])
-                cand = (base[0] + dx, base[1] + dy, base[2] + dz)
+    def neighbors(vset: Set[Tuple[int, int, int]]):
+        """Yield every connectivity-preserving 1-voxel mutation of *vset*.
+        Order is randomized so successive callers get different solutions."""
+        # ADD candidates: in-bounds empty cells adjacent to an existing voxel
+        adds: Set[Tuple[int, int, int]] = set()
+        for v in vset:
+            for dx, dy, dz in DIRECTIONS:
+                cand = (v[0] + dx, v[1] + dy, v[2] + dz)
                 if (0 <= cand[0] < gx and 0 <= cand[1] < gy and 0 <= cand[2] < gz
                         and cand not in vset):
-                    vset.add(cand)
-                    placed = True
-                    break
-            if not placed:
-                continue
-        else:
-            # Remove a voxel without increasing the component count. Try
-            # several candidates; skip any whose removal would split a
-            # component (yielding an orphan / stray voxel).
-            if len(vset) <= 3:
-                continue
-            removed = False
-            candidates = list(vset)
-            _random.shuffle(candidates)
-            for cand in candidates[:6]:
-                trial = vset - {cand}
-                if _count_components(trial, grid_size) <= target_n_components:
-                    vset = trial
-                    removed = True
-                    break
-            if not removed:
-                continue
+                    adds.add(cand)
+        adds_list = list(adds)
+        _random.shuffle(adds_list)
+        for cand in adds_list:
+            new_set = vset | {cand}
+            if _count_components(new_set, grid_size) == target_n_components:
+                yield new_set
 
-        canon = canonical_voxel_form(list(vset))
-        if canon not in seen_canonicals:
-            return [list(v) for v in vset]
+        # REMOVE candidates: any voxel whose removal does not change the
+        # component count. Empty / underflow shapes are skipped to avoid
+        # collapsing the distractor below a useful size.
+        if len(vset) > 1:
+            rems = list(vset)
+            _random.shuffle(rems)
+            for cand in rems:
+                trial = vset - {cand}
+                if not trial:
+                    continue
+                if _count_components(trial, grid_size) == target_n_components:
+                    yield trial
+
+    # BFS over canonical forms. Visiting by canonical form ensures we don't
+    # waste expansions on rotational copies of states we've already seen.
+    start_canon = canonical_voxel_form(list(start_set))
+    visited: Set = {start_canon}
+    frontier: deque = deque([start_set])
+    expansions = 0
+
+    while frontier and expansions < max_iterations:
+        current = frontier.popleft()
+        expansions += 1
+        for nxt in neighbors(current):
+            canon = canonical_voxel_form(list(nxt))
+            if canon in visited:
+                continue
+            visited.add(canon)
+            if canon not in seen_canonicals:
+                return [list(v) for v in nxt]
+            frontier.append(nxt)
 
     return None
 
