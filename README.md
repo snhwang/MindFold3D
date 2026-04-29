@@ -4,7 +4,7 @@
 
 # MindFold 3D
 
-**Patent Pending** | Copyright (c) 2024-2026 The Pennsylvania State University. All rights reserved.
+**Patent Pending** (U.S. provisional application filed April 15, 2026) | Copyright (c) 2024-2026 The Pennsylvania State University. All rights reserved.
 Inventors: Scott N. Hwang, Parviz Safadel
 
 Licensed under the Open Core Ventures Source Available License (OCVSAL) v1.0. See [LICENSE](LICENSE). Production use requires a commercial agreement. For commercial licensing, contact the Penn State Office of Technology Transfer at ottinfo@psu.edu.
@@ -132,7 +132,7 @@ Apply to all 3D shapes in Recognition Mode and Builder Mode.
 
 ## Intellectual Property
 
-This software implements inventions described in a pending patent application. For licensing inquiries, contact the Penn State Office of Technology Transfer at ottinfo@psu.edu.
+This software implements inventions described in a U.S. provisional patent application filed April 15, 2026. For licensing inquiries, contact the Penn State Office of Technology Transfer at ottinfo@psu.edu.
 
 ### Acknowledgements
 
