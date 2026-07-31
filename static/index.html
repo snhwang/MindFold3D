@@ -1633,8 +1633,14 @@
       const _urlMode = new URLSearchParams(window.location.search).get('mode');
       if (_urlMode === 'builder' && typeof window.switchToBuilderMode === 'function') {
         setTimeout(() => window.switchToBuilderMode(), 0);
-      } else if (typeof window.switchToRecognitionMode === 'function') {
-        setTimeout(() => window.switchToRecognitionMode(), 0);
+      } else {
+        // Recognition is the markup default and the auth-init path already
+        // calls loadQuestion(). Calling switchToRecognitionMode() here would
+        // fire a SECOND loadQuestion() whose response replaces the first
+        // question right after it renders (same symptom as the bug fixed in
+        // a1367aa, different cause). Only flip the body class that the
+        // phone layout CSS depends on.
+        document.body.classList.add('mc-active');
       }
 
       // Restore AI Coach toggle state and persist changes.
@@ -1810,6 +1816,19 @@
 
     async function loadQuestion() {
       if (sessionEnded) return;
+
+      // Single-flight guard: ignore duplicate load requests while one is in
+      // flight. A second concurrent load replaces the question the user is
+      // looking at before they can answer (this bug has recurred via two
+      // different callers: a stale auto-retry removed in a1367aa, and a
+      // redundant switchToRecognitionMode() during init). The timestamp
+      // auto-expires after 10s so a missed clear can never soft-lock the app.
+      const _now = Date.now();
+      if (window._questionLoadingSince && (_now - window._questionLoadingSince) < 10000) {
+        console.warn('loadQuestion ignored: a load is already in flight');
+        return;
+      }
+      window._questionLoadingSince = _now;
 
       // Clear any delayed matching timers from previous question
       if (window._wmTimers) {
@@ -2069,8 +2088,10 @@
         }
 
         console.log(`Question loaded (WM mode: ${wmMode}), ready for selection`);
+        window._questionLoadingSince = 0;
 
       } catch (err) {
+        window._questionLoadingSince = 0;
         console.error("Load failed:", err);
         document.getElementById('error').textContent = '❌ ' + err.message;
       }
