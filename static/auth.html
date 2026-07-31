@@ -281,10 +281,16 @@
 
   <div class="container">
     <!-- Primary: Guest mode -->
-    <h1 class="section-heading">Start playing now</h1>
-    <button class="guest-primary-btn" id="guest-login-btn">Continue as Guest</button>
-    <p class="guest-note">No signup required. Jump straight into the game.</p>
+    <h1 class="section-heading">MindFold 3D</h1>
+    <button class="guest-primary-btn" id="guest-login-btn">Start Game</button>
+    <p class="guest-note">No signup required.</p>
 
+    <style>
+      /* Public research-demo build: single Start Game entry point.
+         The account UI below is hidden, not removed, so the page's JS
+         handler wiring stays valid. */
+      .divider-section, .tabs, .tab-content, #forgot-form-container { display: none !important; }
+    </style>
     <div class="divider-section">or create an account to save your progress</div>
 
     <!-- Optional: Login / Register -->
