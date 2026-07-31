@@ -1768,6 +1768,11 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
         "hole": HoleMarkedLoopSkeleton,
     }
     cls = skeleton_classes.get(archetype, TreeSkeleton)
+    # A target_b1 spec is a hole-tier spec regardless of archetype (mirrors
+    # the is_hole_tier inference below). Only HoleMarkedLoopSkeleton can
+    # certify cubical β₁ — and it is the only rule that takes an rng.
+    if spec.target_b1 is not None:
+        cls = HoleMarkedLoopSkeleton
 
     # Hole-tier shapes target cubical β₁ rather than graph circuit rank μ.
     # The optimizer may run on them, but only in β₁-preserving mode (every

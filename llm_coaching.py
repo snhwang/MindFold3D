@@ -502,21 +502,36 @@ def get_coaching_response(
     if client is None:
         return None
 
-    try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=max_tokens or LLM_MAX_TOKENS,
-            temperature=temperature,
-        )
-        raw = response.choices[0].message.content
-        return sanitize_coaching_text(raw)
-    except Exception as e:
-        print(f"LLM coaching error: {e}")
-        return None
+    params = {
+        "model": LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": max_tokens or LLM_MAX_TOKENS,
+        "temperature": temperature,
+    }
+    # Reasoning-class OpenAI models (gpt-5.x, o-series) reject max_tokens
+    # in favor of max_completion_tokens, and only accept the default
+    # temperature. Local backends (Ollama, LM Studio, vLLM) expect the
+    # classic parameters, so retry with whichever form the server demands.
+    for _ in range(3):
+        try:
+            response = client.chat.completions.create(**params)
+            raw = response.choices[0].message.content
+            return sanitize_coaching_text(raw)
+        except Exception as e:
+            msg = str(e)
+            if "max_tokens" in params and "max_completion_tokens" in msg:
+                params["max_completion_tokens"] = params.pop("max_tokens")
+                continue
+            if "temperature" in params and "'temperature'" in msg:
+                params.pop("temperature")
+                continue
+            print(f"LLM coaching error: {e}")
+            return None
+    print("LLM coaching error: could not negotiate request parameters")
+    return None
 
 
 # ---------------------------------------------------------------------------

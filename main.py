@@ -960,6 +960,10 @@ def get_multiple_choice(
                         alt_archetypes = [a for a in ("tree", "chiral", "bridge")
                                           if a != skeleton_spec.archetype]
                         distractor_spec.archetype = random.choice(alt_archetypes)
+                        # The β₁ certification belongs to the hole generator
+                        # only; a lingering target_b1 would force the swapped
+                        # spec back onto the hole-tier path.
+                        distractor_spec.target_b1 = None
                     generated_distractor_shape_data = generate_shape_skeleton(distractor_spec)
                 else:
                     current_distractor_sfs = perturb_features(base_target_sfs, tier)
@@ -1091,22 +1095,25 @@ def get_multiple_choice(
             features={}
         )
 
+        # Distractors must be distinct under rotation (shapes are freely
+        # rotated at display time): straight line, L, and square — all
+        # different canonical forms from each other and from the target tripod.
         choices = [
             ShapeResponse(
                 id=f"fallback_distractor_1_{uuid.uuid4().hex[:6]}",
-                voxels=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+                voxels=[[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 1, 0]],
                 grid_size=[3, 3, 3],
                 features={}
             ),
             ShapeResponse(
                 id=f"fallback_distractor_2_{uuid.uuid4().hex[:6]}",
-                voxels=[[0, 0, 0], [1, 0, 0], [1, 1, 0]],
+                voxels=[[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                 grid_size=[3, 3, 3],
                 features={}
             ),
             ShapeResponse(
                 id=f"fallback_distractor_3_{uuid.uuid4().hex[:6]}",
-                voxels=[[0, 0, 0], [0, 1, 0], [0, 1, 1]],
+                voxels=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]],
                 grid_size=[3, 3, 3],
                 features={}
             ),

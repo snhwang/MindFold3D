@@ -14,7 +14,7 @@ import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cognitive_mapping import SkeletonSpec
 from skeleton_generation import LoopSkeleton

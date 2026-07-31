@@ -83,8 +83,6 @@ Accessible from the User menu. Tracks per-feature success rates across trials to
 
 ```bash
 pip install -r requirements.txt
-cp env.example .env
-# edit .env as described below
 python main.py
 ```
 

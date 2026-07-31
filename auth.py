@@ -18,11 +18,19 @@ load_dotenv()
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError(
-        "SECRET_KEY environment variable is not set. "
-        "The application cannot start without a secure signing secret."
+    # Local/replication fallback: generate an ephemeral signing key so the
+    # app runs out of the box (git clone -> pip install -> uvicorn). Login
+    # sessions are invalidated on every restart under this mode. For any
+    # deployment, set SECRET_KEY in the environment (see env.example).
+    import secrets as _secrets
+    SECRET_KEY = _secrets.token_urlsafe(64)
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "SECRET_KEY is not set - generated an EPHEMERAL key for this run. "
+        "Login sessions will not survive a restart. Set SECRET_KEY in your "
+        "environment for any real deployment (see env.example)."
     )
-if len(SECRET_KEY) < 32:
+elif len(SECRET_KEY) < 32:
     raise RuntimeError(
         "SECRET_KEY is too short. It must be at least 32 characters long. "
         "Use a cryptographically random value (e.g., 'openssl rand -hex 32')."

@@ -13,11 +13,12 @@ Outputs a JSON summary and per-shape CSV for the paper's Heavy appendix.
 
 import json
 import random
+import zlib
 import sys
 from pathlib import Path
 
 # Ensure imports work
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cognitive_mapping import SkeletonSpec
 from skeleton_generation import (
@@ -125,7 +126,7 @@ def main():
                 "circuit_ranks": [], "cubical_b1s": [],
             }
             for seed in range(N_SEEDS):
-                random.seed(seed * 1000 + hash(key) % 1000)
+                random.seed(seed * 1000 + zlib.crc32(key.encode()) % 1000)  # crc32: deterministic across processes (builtin hash() is randomized)
                 spec = SkeletonSpec(
                     archetype=arch_name,
                     voxel_count=tier_params["voxel_count"],
@@ -198,7 +199,7 @@ def main():
               f"{cr_range:<15} {cb_range}")
 
     # Save results as JSON
-    out_path = Path("/home/user/workspace/cross_validation_results.json")
+    out_path = Path(__file__).resolve().parent / "cross_validation_results.json"
     summary = {
         "corpus_size": total,
         "circuit_rank_agrees_with_cubical_b1": agree,
@@ -217,7 +218,7 @@ def main():
 
     # Also save per-shape CSV
     import csv
-    csv_path = Path("/home/user/workspace/cross_validation_per_shape.csv")
+    csv_path = Path(__file__).resolve().parent / "cross_validation_per_shape.csv"
     with open(csv_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=[
             "archetype", "tier", "seed", "V", "E", "C",
