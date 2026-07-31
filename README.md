@@ -4,7 +4,7 @@
 
 # MindFold 3D
 
-**Patent Pending** (U.S. provisional application filed April 15, 2026) | Copyright (c) 2024-2026 The Pennsylvania State University. All rights reserved.
+**Patent Pending** (U.S. provisional application filed April 15, 2026) | Copyright (c) 2026 The Pennsylvania State University. All rights reserved.
 Inventors: Scott N. Hwang, Parviz Safadel
 
 Licensed under the Open Core Ventures Source Available License (OCVSAL) v1.0. See [LICENSE](LICENSE). Production use requires a commercial agreement. For commercial licensing, contact the Penn State Office of Technology Transfer at ottinfo@psu.edu.
@@ -16,10 +16,11 @@ A computational framework for adaptive spatial cognition assessment and training
 - Interactive 3D shape visualization
 - Two game modes: Recognition and Builder
 - Performance scorecard with per-feature cognitive analytics
-- Skeleton-first shape generation with three structural archetypes (tree, chiral, bridge)
+- Skeleton-first shape generation with three structural archetypes (tree, chiral, hole). Cyclic shapes are produced by a topology-guaranteed generator: ring templates physically reserve each intended hole and every emitted shape is certified against a direct cubical first-Betti-number (β₁) computation, with acyclic shapes certified β₁ = 0 the same way. Circuit rank μ of the adjacency graph is retained as an internal control quantity and unscored diagnostic — it is distinct from β₁ and never reported under that name.
 - Randomly rotated shapes for increased difficulty
 - Real-time feedback with visual and sound effects
-- Anonymous session-based play — no registration required
+- User authentication (login, register, guest access, logout)
+- Password reset functionality
 - User profiles
 - Responsive design for desktop and mobile devices
 
@@ -87,7 +88,7 @@ cp env.example .env
 python main.py
 ```
 
-Then open http://localhost:3001 in your browser and click **Start Game** to begin. No registration is required.
+Then open http://localhost:3001 in your browser and register a new account, or click **Continue as Guest** for a no-signup session.
 
 On Replit, the **Run** button invokes the same command via `.replit`.
 
@@ -101,20 +102,30 @@ The app reads configuration from environment variables (typically through a `.en
   ```bash
   python -c "import secrets; print(secrets.token_urlsafe(64))"
   ```
-  Paste the output into `.env` as `SECRET_KEY=...`. Rotating this key invalidates all existing session tokens.
+  Paste the output into `.env` as `SECRET_KEY=...`. Rotating this key invalidates all existing login sessions.
 
 #### Optional
 
 - **`DATABASE_URL`** — defaults to a local SQLite file (`sqlite:///./mindfold.db`). Set a PostgreSQL URL to use Postgres instead (e.g., on Replit, this is populated automatically).
 - **`ACCESS_TOKEN_EXPIRE_MINUTES`** — JWT session lifetime. Defaults to 30.
 - **`LLM_BASE_URL`, `LLM_MODEL`, ...** — only needed if you want the AI coach feature. Works with any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, cloud APIs). Leave unset to disable.
+- **`RESEND_API_KEY`, `MAIL_FROM`, `MAIL_REPLY_TO`, `APP_BASE_URL`** — only needed for real password-reset emails via [Resend](https://resend.com). Leave `RESEND_API_KEY` unset and the app will still work — registered users can log in normally, and the password-reset endpoint will return the reset link directly in its JSON response (fine for local testing, not for production).
 
+### What works without extra setup
 
-## Sessions
+- **Guest access** — requires only `SECRET_KEY`. No database writes beyond session tokens, no email.
+- **Registration / login** — requires `SECRET_KEY` and the database. Does not require Resend.
+- **Password reset emails** — requires `RESEND_API_KEY` (plus a verified sending domain in Resend).
 
-The public build does not support user accounts. Each time you click **Start Game**, the backend issues a new anonymous session backed by a short-lived JWT. Stats (Performance Scorecard) persist for the duration of that session. Clicking **New Game** clears the session and starts a fresh one.
+## Authentication
 
-If you need per-participant tracking for a formal study, layer a registration / login flow on top of `/start-session` in your fork.
+The app includes a complete authentication system:
+- User registration with email and username
+- Guest access — try the app without an account
+- Secure password storage with bcrypt hashing
+- JWT-based authentication
+- Password reset functionality
+- User profiles
 
 ## Shape Manipulation Controls
 

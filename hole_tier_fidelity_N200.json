@@ -1,0 +1,520 @@
+[
+  {
+    "grid_size": 11,
+    "target_b1": 1,
+    "target_voxels": 8,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 1,
+      "min": 1,
+      "max": 1,
+      "std": 0.0
+    },
+    "b1_stats": {
+      "mean": 1,
+      "min": 1,
+      "max": 1,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 8,
+      "min": 8,
+      "max": 8,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 0.41767382621765137
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 1,
+    "target_voxels": 15,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 1.015,
+      "min": 1,
+      "max": 2,
+      "std": 0.12185748327926266
+    },
+    "b1_stats": {
+      "mean": 1,
+      "min": 1,
+      "max": 1,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 15,
+      "min": 15,
+      "max": 15,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 0.6412856578826904
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 1,
+    "target_voxels": 20,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 1.125,
+      "min": 1,
+      "max": 3,
+      "std": 0.3742664517217942
+    },
+    "b1_stats": {
+      "mean": 1,
+      "min": 1,
+      "max": 1,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 20,
+      "min": 20,
+      "max": 20,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 0.744565486907959
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 1,
+    "target_voxels": 25,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.975,
+    "mean_attempts_when_successful": 1.025,
+    "failure_mode_counts": {
+      "b1_high": 5
+    },
+    "mu_stats": {
+      "mean": 1.295,
+      "min": 1,
+      "max": 3,
+      "std": 0.5472406799654475
+    },
+    "b1_stats": {
+      "mean": 1,
+      "min": 1,
+      "max": 1,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 25,
+      "min": 25,
+      "max": 25,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 2.2325499057769775
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 2,
+    "target_voxels": 14,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 2,
+      "min": 2,
+      "max": 2,
+      "std": 0.0
+    },
+    "b1_stats": {
+      "mean": 2,
+      "min": 2,
+      "max": 2,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 14,
+      "min": 14,
+      "max": 14,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 0.8169500827789307
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 2,
+    "target_voxels": 20,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 3.865,
+      "min": 2,
+      "max": 5,
+      "std": 1.286487563583994
+    },
+    "b1_stats": {
+      "mean": 2,
+      "min": 2,
+      "max": 2,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 22.08,
+      "min": 20,
+      "max": 24,
+      "std": 2.0034141712857436
+    },
+    "voxel_drift_stats": {
+      "mean": 2.08,
+      "min": 0,
+      "max": 4,
+      "std": 2.0034141712857436
+    },
+    "elapsed_seconds": 1.503589391708374
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 2,
+    "target_voxels": 25,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.95,
+    "mean_attempts_when_successful": 1.055,
+    "failure_mode_counts": {
+      "b1_high": 11
+    },
+    "mu_stats": {
+      "mean": 4.1,
+      "min": 2,
+      "max": 6,
+      "std": 1.181941168004193
+    },
+    "b1_stats": {
+      "mean": 2,
+      "min": 2,
+      "max": 2,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 25,
+      "min": 25,
+      "max": 25,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 2.8788774013519287
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 2,
+    "target_voxels": 30,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.84,
+    "mean_attempts_when_successful": 1.195,
+    "failure_mode_counts": {
+      "b1_high": 39
+    },
+    "mu_stats": {
+      "mean": 4.96,
+      "min": 2,
+      "max": 8,
+      "std": 1.5231546211727816
+    },
+    "b1_stats": {
+      "mean": 2,
+      "min": 2,
+      "max": 2,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 30,
+      "min": 30,
+      "max": 30,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 6.850016832351685
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 3,
+    "target_voxels": 20,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 3.04,
+      "min": 3,
+      "max": 4,
+      "std": 0.19645092217681392
+    },
+    "b1_stats": {
+      "mean": 3,
+      "min": 3,
+      "max": 3,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 20,
+      "min": 20,
+      "max": 20,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 1.3509747982025146
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 3,
+    "target_voxels": 25,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.975,
+    "mean_attempts_when_successful": 1.025,
+    "failure_mode_counts": {
+      "b1_high": 5
+    },
+    "mu_stats": {
+      "mean": 3.465,
+      "min": 3,
+      "max": 5,
+      "std": 0.6250829090737328
+    },
+    "b1_stats": {
+      "mean": 3,
+      "min": 3,
+      "max": 3,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 25,
+      "min": 25,
+      "max": 25,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 3.6395857334136963
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 3,
+    "target_voxels": 30,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.87,
+    "mean_attempts_when_successful": 1.15,
+    "failure_mode_counts": {
+      "b1_high": 30
+    },
+    "mu_stats": {
+      "mean": 3.855,
+      "min": 3,
+      "max": 6,
+      "std": 0.8470907944667748
+    },
+    "b1_stats": {
+      "mean": 3,
+      "min": 3,
+      "max": 3,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 30,
+      "min": 30,
+      "max": 30,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 7.5001890659332275
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 4,
+    "target_voxels": 24,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 1.0,
+    "mean_attempts_when_successful": 1,
+    "failure_mode_counts": {},
+    "mu_stats": {
+      "mean": 4,
+      "min": 4,
+      "max": 4,
+      "std": 0.0
+    },
+    "b1_stats": {
+      "mean": 4,
+      "min": 4,
+      "max": 4,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 24,
+      "min": 24,
+      "max": 24,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 1.2124922275543213
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 4,
+    "target_voxels": 30,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.975,
+    "mean_attempts_when_successful": 1.025,
+    "failure_mode_counts": {
+      "b1_high": 5
+    },
+    "mu_stats": {
+      "mean": 4.085,
+      "min": 4,
+      "max": 5,
+      "std": 0.27958152504364203
+    },
+    "b1_stats": {
+      "mean": 4,
+      "min": 4,
+      "max": 4,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 30,
+      "min": 30,
+      "max": 30,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 4.577167987823486
+  },
+  {
+    "grid_size": 11,
+    "target_b1": 4,
+    "target_voxels": 35,
+    "n_shapes_requested": 200,
+    "n_success": 200,
+    "n_fail_exceeded_max_attempts": 0,
+    "first_pass_rate": 0.83,
+    "mean_attempts_when_successful": 1.205,
+    "failure_mode_counts": {
+      "b1_high": 41
+    },
+    "mu_stats": {
+      "mean": 4.365,
+      "min": 4,
+      "max": 6,
+      "std": 0.5507190366116211
+    },
+    "b1_stats": {
+      "mean": 4,
+      "min": 4,
+      "max": 4,
+      "std": 0.0
+    },
+    "voxel_count_stats": {
+      "mean": 35,
+      "min": 35,
+      "max": 35,
+      "std": 0.0
+    },
+    "voxel_drift_stats": {
+      "mean": 0,
+      "min": 0,
+      "max": 0,
+      "std": 0.0
+    },
+    "elapsed_seconds": 10.00325632095337
+  }
+]

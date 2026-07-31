@@ -1,7 +1,7 @@
 """
 LLM-Mediated Cognitive Coaching Layer for MindFold 3D.
 
-Copyright (c) 2024-2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
+Copyright (c) 2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
 Patent pending. See docs/PATENT_SPECIFICATION.md for claims.
 
 This module implements the LLM-Mediated Cognitive Coaching System, a core
@@ -74,7 +74,7 @@ The system measures performance across a three-layer architecture:
 
 ### Layer 1: Shape Geometry (what the shape IS — optimized by the generator)
 - **Spatial Form**: anisotropy_index (0=balanced, 1=elongated), shape_form_index (-1=rod, +1=pancake), planarity_score (high=flat, low=truly 3D)
-- **Structural Complexity**: branching_factor (branch points in the shape graph), number_of_components (disconnected clusters), cycle_count (holes/loops in the adjacency graph; 0=tree-like, 1+=has loops)
+- **Structural Complexity**: branching_factor (branch points in the shape graph), number_of_components (disconnected clusters), circuit_rank (independent cycles in the voxel adjacency graph; 0=tree-like), betti_1 (first Betti number — actual volumetric holes/tunnels; can be lower than circuit_rank on dense shapes)
 - **Spatial Density**: compactness_score (neighbor density, 0=sparse, 1=dense), voxel_count (total cubes)
 
 Emergent features (computed but not targeted): surface_area, bounding_box_ratio, dominant_axis, largest_component_ratio
@@ -99,12 +99,12 @@ Emergent features (computed but not targeted): surface_area, bounding_box_ratio,
 ## Structural Archetypes
 - **Gestalt-Encodable**: Compact, symmetric shapes (compactness>0.7, branching 0-1). Errors indicate transformation deficits, not encoding failures.
 - **Analytically-Decomposable**: Branching, multi-segment shapes (branching>=3). Errors may indicate incomplete encoding rather than transformation failure.
-- **Topologically-Complex**: Shapes with holes, bridges, concavities (cycle_count >= 1). Errors indicate volumetric representation deficits (Skill 3).
+- **Topologically-Complex**: Shapes with holes, bridges, concavities (betti_1 >= 1). Errors indicate volumetric representation deficits (Skill 3).
 
 ## Nine Target Skills
 1. Holistic Shape Recognition — fast gestalt encoding of compact shapes
 2. Structural Decomposition — parsing branching shapes into parts (Palmer 1977)
-3. Topological Reasoning — sensitivity to holes, connectivity, genus (Chen 2005)
+3. Topological Reasoning — sensitivity to holes, connectivity, genus (Chen 1982)
 4. Mental Rotation — speed/accuracy of 3D rotation (Shepard & Metzler 1971)
 5. Mirror Discrimination — chirality detection, distinct RT pattern from rotation (Corballis 1988)
 6. Spatial Visualization — complex multi-step mental manipulation (Hegarty & Waller 2004)
@@ -119,7 +119,7 @@ Emergent features (computed but not targeted): surface_area, bounding_box_ratio,
 - RT increases steeply with voxel count → encoding capacity limit
 - Errors on high-anisotropy shapes → difficulty processing orientation-dependent views (Skill 1/4)
 - Success on easy shapes but failure on complex ones at same rotation → encoding deficit, not rotation deficit
-- Errors on shapes with cycle_count>0 but not on acyclic shapes → topological reasoning deficit (Skill 3): struggles with holes/loops requiring volumetric encoding
+- Errors on shapes with betti_1>0 but not on acyclic shapes → topological reasoning deficit (Skill 3): struggles with holes/loops requiring volumetric encoding
 - Errors specifically on part-permuted distractors → configural binding deficit (Skill 7): encodes WHAT parts exist but not HOW they are arranged
 - Errors in perspective mode but not in standard rotation mode → perspective-taking deficit (Skill 8): can rotate objects but cannot infer appearance from a different viewpoint
 
@@ -140,7 +140,7 @@ Emergent features (computed but not targeted): surface_area, bounding_box_ratio,
 - **Elimination strategy**: Reject obviously wrong choices first to reduce comparison load.
 - **Symmetry exploitation**: Use symmetry axes as anchoring landmarks for comparison.
 - **Part-relation encoding**: For branching shapes, encode not just which parts exist but WHERE each arm extends from the branch point. Think of it as "syntax" (arrangement) not just "vocabulary" (parts).
-- **Volumetric scanning**: For shapes with holes/loops (cycle_count>0), mentally trace around each hole to verify it exists in both shapes. Think of the shape as a 3D volume with tunnels, not just a collection of blocks.
+- **Volumetric scanning**: For shapes with holes/loops (betti_1>0), mentally trace around each hole to verify it exists in both shapes. Think of the shape as a 3D volume with tunnels, not just a collection of blocks.
 - **Viewpoint simulation**: For perspective tasks, imagine physically walking around the shape to the new viewpoint. Identify landmark features (branches, corners) visible from the target view, then predict which would be visible or hidden from the choice viewpoint.
 - **Systematic comparison**: Before rotating shapes with orbit controls, compare the overall silhouette from the current view. Only use controls to verify specific features, not to fully align shapes. Reducing physical rotation builds mental rotation skill.
 
@@ -302,7 +302,7 @@ def build_quick_feedback_prompt(
     for key in [
         "voxel_count", "branching_factor", "compactness_score",
         "planarity_score", "anisotropy_index", "shape_form_index",
-        "number_of_components", "cycle_count",
+        "number_of_components", "circuit_rank", "betti_1",
     ]:
         val = target_features.get(key)
         if val is not None:
@@ -397,7 +397,7 @@ def build_scorecard_analysis_prompt(performance_summary: str) -> str:
     """Detailed analysis for the scorecard page."""
     return (
         "The user is viewing their detailed performance scorecard. "
-        "Provide an in-depth cognitive analysis.\n\n"
+        "Provide an in-depth cognitive analysis written for a non-technical reader.\n\n"
         f"{performance_summary}\n\n"
         "Provide a detailed analysis with these sections:\n"
         "1. **Cognitive Profile** (map performance patterns to the nine-skill "
@@ -411,13 +411,86 @@ def build_scorecard_analysis_prompt(performance_summary: str) -> str:
         "working memory effects)\n"
         "5. **Recommended Training Sequence** (specific progression of "
         "difficulty settings and task variants)\n\n"
-        "Keep the total response under 400 words."
+        "Output rules (IMPORTANT):\n"
+        "- Write in plain prose and short bulleted sentences only.\n"
+        "- Do NOT output JSON, arrays, code blocks, raw numbers in brackets, "
+        "decimal probabilities, internal field names like 'is_chiral', "
+        "'angular_disparity_bucket', 'generation_mode', or any variable/key names.\n"
+        "- Translate every technical term into natural language (e.g., "
+        "'angular disparity' -> 'how far the shape is rotated'; "
+        "'chirality' -> 'mirror-image handedness'; 'greedy' -> 'default generator').\n"
+        "- Percentages should be rounded integers. Never show 0.5666... — say 57%.\n"
+        "- Keep the total response under 400 words."
     )
 
 
 # ---------------------------------------------------------------------------
 # LLM call
 # ---------------------------------------------------------------------------
+
+import re as _re
+
+# Internal identifiers / raw data patterns that should never leak into
+# user-facing coach output.
+_FORBIDDEN_TOKENS = [
+    "is_chiral",
+    "angular_disparity_bucket",
+    "generation_mode",
+    "task_variant",
+    "feature_scorecard",
+    "interaction_scorecard",
+    "recent_attempts_full",
+    "debug_info",
+    "rotation_events",
+]
+
+
+def sanitize_coaching_text(text: str) -> str:
+    """Strip raw JSON arrays, ugly decimals, and internal field names from
+    coach output so reviewers see clean prose. Defensive belt-and-suspenders
+    in case the LLM ignores the prompt rules.
+    """
+    if not text:
+        return text
+
+    cleaned = text
+
+    # 1) Drop standalone fenced code blocks (```...```).
+    cleaned = _re.sub(r"```[\s\S]*?```", "", cleaned)
+
+    # 2) Remove lines that are *only* a raw numeric JSON array, e.g. "[7, 7, 7, 8]".
+    cleaned = _re.sub(
+        r"^\s*\[[\s0-9\.,\-eE]+\]\s*$",
+        "",
+        cleaned,
+        flags=_re.MULTILINE,
+    )
+
+    # 3) Strip inline numeric JSON arrays (keep surrounding prose intact).
+    cleaned = _re.sub(r"\[[\s0-9\.,\-eE]+\]", "", cleaned)
+
+    # 4) Round bare high-precision decimals like 0.5666666666666666 -> 57%.
+    def _round_decimal(match):
+        try:
+            val = float(match.group(0))
+        except ValueError:
+            return match.group(0)
+        if 0.0 <= val <= 1.0:
+            return f"{round(val * 100)}%"
+        return f"{round(val, 2)}"
+
+    cleaned = _re.sub(r"\b\d+\.\d{4,}\b", _round_decimal, cleaned)
+
+    # 5) Remove bare snake_case/quoted-string identifiers that should never surface.
+    for token in _FORBIDDEN_TOKENS:
+        cleaned = _re.sub(rf'"?{_re.escape(token)}"?', "", cleaned)
+
+    # 6) Tidy whitespace left behind by substitutions.
+    cleaned = _re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    return cleaned.strip()
+
 
 def get_coaching_response(
     user_prompt: str,
@@ -439,7 +512,8 @@ def get_coaching_response(
             max_tokens=max_tokens or LLM_MAX_TOKENS,
             temperature=temperature,
         )
-        return response.choices[0].message.content
+        raw = response.choices[0].message.content
+        return sanitize_coaching_text(raw)
     except Exception as e:
         print(f"LLM coaching error: {e}")
         return None
@@ -479,10 +553,15 @@ FALLBACK_MESSAGES = {
         "Multi-component shapes (disconnected pieces) require encoding each "
         "piece separately. Compare the pieces one at a time."
     ),
-    "cycle_count": (
-        "Shapes with holes or loops require tracking the 3D volume, not just "
-        "individual blocks. Try mentally tracing around any holes to verify "
-        "both shapes have the same loop structure."
+    "betti_1": (
+        "Shapes with holes or tunnels require tracking the 3D volume, not just "
+        "individual blocks. Try mentally tracing around each hole to verify "
+        "both shapes have the same hole structure."
+    ),
+    "circuit_rank": (
+        "Shapes whose parts branch and rejoin form closed paths that are easy "
+        "to miscount. Trace the connections between parts systematically — "
+        "follow each path until it returns to where it started."
     ),
     "surface_area": (
         "Shapes with high surface area have more visual detail to process. "

@@ -1,12 +1,12 @@
-import os
+import bcrypt
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
-
+from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime, timedelta
+import os
 from dotenv import load_dotenv
 
 import models
@@ -15,6 +15,7 @@ from database import get_db
 
 load_dotenv()
 
+# Configuration
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(
@@ -27,35 +28,43 @@ if len(SECRET_KEY) < 32:
         "Use a cryptographically random value (e.g., 'openssl rand -hex 32')."
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours for a guest session
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="start-session", auto_error=True)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode["exp"] = expire
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
-def create_guest_user(db: Session) -> models.User:
-    """Create a new anonymous guest user row keyed by a random UUID."""
-    username = f"guest_{uuid.uuid4().hex[:12]}"
-    user = models.User(
-        username=username,
-        email=f"{username}@guest.local",
-        hashed_password="",
-        is_active=True,
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8") if isinstance(hashed_password, str) else hashed_password,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+
+
+def get_password_hash(password):
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def authenticate_user(db: Session, username: str, password: str):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
     return user
 
 
-def get_current_user(token: str = Depends(oauth2_scheme),
-                     db: Session = Depends(get_db)) -> models.User:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -63,23 +72,30 @@ def get_current_user(token: str = Depends(oauth2_scheme),
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: Optional[str] = payload.get("sub")
-        if not username:
+        username: str = payload.get("sub")
+        if username is None:
             raise credentials_exception
+        token_data = schemas.TokenData(username=username)
     except JWTError:
         raise credentials_exception
-
-    user = db.query(models.User).filter(models.User.username == username).first()
+    # Guest users get a lightweight object without a database lookup.
+    # Each guest login receives a unique session ID embedded in the JWT so that
+    # concurrent guest sessions cannot share in-memory state or DB rows.
+    if payload.get("is_guest"):
+        guest = models.User(username="guest", email="guest@mindfold3d", hashed_password="", is_active=True)
+        guest.id = None
+        guest_session_id = payload.get("guest_session_id") or str(uuid.uuid4())
+        guest.session_key = f"guest-{guest_session_id}"
+        return guest
+    user = db.query(models.User).filter(models.User.username == token_data.username).first()
     if user is None:
         raise credentials_exception
-    # Attach a stable session key derived from the user's PK so per-user
-    # in-memory state can never alias across concurrent users (or guests,
-    # since this build creates a fresh DB user per guest login).
+    # Attach a stable session key for authenticated users (their integer PK as str).
     user.session_key = str(user.id)
     return user
 
 
-def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> models.User:
+def get_current_active_user(current_user: models.User = Depends(get_current_user)):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+    return current_user 

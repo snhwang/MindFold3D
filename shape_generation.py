@@ -1,7 +1,7 @@
 """
 Multi-Objective Shape Generation and Feature Analysis Pipeline for MindFold 3D.
 
-Copyright (c) 2024-2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
+Copyright (c) 2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
 Patent pending. See docs/PATENT_SPECIFICATION.md for claims.
 
 This module implements the Shape Feature Analysis Pipeline and Optimization-Based
@@ -12,8 +12,11 @@ Key inventive methods:
   - _get_pca_eigenvalues():          PCA eigenvalue decomposition for shape characterization
   - _calculate_anisotropy_index():   PCA-based anisotropy: 1-(lambda3/lambda1) (Claim 12)
   - _calculate_shape_form_index():   PCA-based form: (2*lambda2-lambda1-lambda3)/(lambda1-lambda3) (Claim 12)
-  - _calculate_cycle_count():        Circuit rank: |E|-|V|+C for topological complexity (Claim 13)
+  - _calculate_circuit_rank():       Circuit rank μ = |E|−|V|+C of the voxel 6-adjacency graph (Claim 13)
+  - _calculate_betti_1():            β₁ of the shape (measured as circuit rank for graph-cyclic shapes;
+                                     equals cubical β₁ on 1-voxel-wide skeletons, cross-validated)
   - generate_mirror_reflection():    Chirality detection via mirror analysis (Claim 9)
+  - generate_shape_advanced():       Multi-objective scored shape growth (Claim 1c)
   - generate_part_permuted_distractor(): Configural binding distractors (Claim 7)
 """
 # shape_generation.py
@@ -151,12 +154,66 @@ def _calculate_branching_factor(voxels_set: Set[Tuple[int, int, int]], grid_size
             branch_points += 1
     return branch_points
 
-def _calculate_cycle_count(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[int, int, int]) -> int:
-    """Calculate the number of independent cycles (circuit rank) in the adjacency graph.
+def _calculate_circuit_rank(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[int, int, int]) -> int:
+    """Circuit rank μ of the voxel 6-adjacency graph: μ = |E| − |V| + C.
 
-    Formula: Cycles(G) = |E| - |V| + C
-    where E = edges (face-adjacent pairs), V = voxels, C = connected components.
-    Cycles correspond to holes or loops in the shape (Chen, 2005).
+    This is the first Betti number of the *adjacency graph* (a graph
+    invariant): the number of independent closed paths through the shape's
+    face-adjacency structure, equivalently the number of edges that must be
+    removed to reduce the graph to a spanning forest.
+
+    It is NOT the cubical β₁ of the shape as a solid. The two diverge in both
+    directions on real generator output: every 2×2 face patch contributes a
+    graph cycle with no volumetric hole (μ > β₁ on thick shapes), and
+    edge-adjacent voxel arrangements can enclose a tunnel the face-adjacency
+    graph cannot see (β₁ > μ). Use `_calculate_betti_1` (cubical, via
+    topology_extras.cubical_betti_1) for the topological hole count.
+
+    Parameters
+    ----------
+    voxels_set : set of (x, y, z) tuples
+        The occupied voxels.
+    grid_size : (nx, ny, nz)
+        Bounding-box dimensions used for neighbour indexing.
+
+    Returns
+    -------
+    int
+        The circuit rank μ ≥ 0.
+
+    Notes
+    -----
+    Why circuit rank as the generator's control quantity for graph-cyclic
+    tiers?
+
+    1. It is computable in O(|V|) time from the adjacency graph, whereas
+       full cubical β₁ (β₀ + β₂ − χ) requires building the complement's
+       cavity structure — too slow for the per-candidate scoring loop.
+    2. It is the property the skeleton-first construction directly controls:
+       LoopSkeleton injects graph cycles, TreeSkeleton's skeleton is acyclic,
+       and the fill phase caps μ against the target.
+
+    For tiers that must guarantee actual volumetric holes, use the hole-tier
+    construction mode (HoleMarkedLoopSkeleton), which targets cubical β₁
+    directly via reserved-hole templates plus per-shape validation.
+
+    See Also
+    --------
+    topology_extras.cubical_betti_1 : Full cubical β₁ computation via Euler
+        characteristic, provided as a validation reference and for the
+        paper's methodological supplement.
+
+    References
+    ----------
+    Diestel, R. (2024). *Graph Theory* (6th ed.), §1.9 (circuit rank /
+    cyclomatic number).  Kong, T. Y., & Rosenfeld, A. (1989). Digital
+    topology: Introduction and survey. *Computer Vision, Graphics, and Image
+    Processing*, 48(3), 357–393.  (Background on adjacency structures for
+    voxel objects; note that graph cycles and cubical holes are distinct
+    invariants — see topology_extras for the cubical computation.)
+
+    This implementation supports Claim 13 of the MindFold 3D provisional
+    patent (topology-preserving voxel fill by circuit rank).
     """
     if len(voxels_set) < 4:
         return 0  # Minimum 4 voxels for a cycle in 6-connectivity
@@ -164,6 +221,32 @@ def _calculate_cycle_count(voxels_set: Set[Tuple[int, int, int]], grid_size: Tup
         1 for v in voxels_set for n in _get_neighbors(v, grid_size) if n in voxels_set
     ) // 2  # Each edge counted twice
     return max(0, edge_count - len(voxels_set) + _count_components(voxels_set, grid_size))
+
+
+def _calculate_betti_1(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[int, int, int]) -> int:
+    """First Betti number β₁ of the shape as a cubical complex.
+
+    This is the feature-level entry point that the analysis pipeline calls
+    when it fills the `betti_1` field of `ShapeFeatureSet`. It computes the
+    true cubical β₁ via the Euler-characteristic method
+    (topology_extras.cubical_betti_1).
+
+    β₁ is NOT the circuit rank μ of the adjacency graph: μ > β₁ on shapes
+    with 2-thick face patches (each 2×2 patch adds a graph cycle with no
+    volumetric hole), and β₁ > μ is possible via edge-adjacency tunnels the
+    face-adjacency graph cannot see. Use `_calculate_circuit_rank` for the
+    graph invariant the generator's fill/scoring loops control.
+    """
+    # Lazy import: topology_extras imports _count_components from this module.
+    from topology_extras import cubical_betti_1
+    return cubical_betti_1(voxels_set)
+
+
+# Backward-compat alias. The old name honestly describes the computation
+# (circuit rank / cycle count of the adjacency graph); the new names
+# separate the *feature* (β₁) from the *computation* (circuit rank).
+_calculate_cycle_count = _calculate_circuit_rank
+
 
 def _calculate_planarity_score(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[int, int, int]) -> float:
     """Calculates planarity as the max proportion of voxels lying on any single X, Y, or Z plane.
@@ -400,7 +483,8 @@ def analyze_shape_features(voxels_set: Set[Tuple[int, int, int]],
     actual_features["symmetry_score"] = _calculate_symmetry_score(voxels_set)
     actual_features["compactness_score"] = _calculate_compactness_score(voxels_set, grid_size_tuple)
     actual_features["branching_factor"] = _calculate_branching_factor(voxels_set, grid_size_tuple)
-    actual_features["cycle_count"] = _calculate_cycle_count(voxels_set, grid_size_tuple)
+    actual_features["circuit_rank"] = _calculate_circuit_rank(voxels_set, grid_size_tuple)
+    actual_features["betti_1"] = _calculate_betti_1(voxels_set, grid_size_tuple)
     actual_features["number_of_components"] = _count_components(voxels_set, grid_size_tuple)
     actual_features["planarity_score"] = _calculate_planarity_score(voxels_set, grid_size_tuple)
     actual_features["bounding_box_ratio"] = _calculate_bounding_box_ratio(voxels_set)
@@ -720,21 +804,25 @@ def canonical_voxel_form(voxels) -> Tuple[Tuple[int, int, int], ...]:
     return best
 
 
-def keep_largest_component(voxels, grid_size):
+def keep_largest_component(voxels, grid_size: Tuple[int, int, int]):
     """Return a voxel set containing only the largest connected component.
 
-    Defensive cleanup for shapes that were intended to be single-component
-    but slipped through as orphan + main shape. Accepts list-of-lists or a
-    set of tuples; returns a set of tuples.
+    The shape generation pipeline enforces single-component output in several
+    places, but the enforcement is not airtight: the skeleton fallback accepts
+    the last attempt even if validation failed, and voxel mutations can split
+    a shape at a cut vertex. This helper is a defensive post-step: if a shape
+    has multiple components, discard everything except the largest. Accepts
+    either a set of tuples or a list of lists; returns a set of tuples.
     """
     if isinstance(voxels, list):
-        vset = {tuple(v) for v in voxels}
+        vset: Set[Tuple[int, int, int]] = {tuple(v) for v in voxels}
     else:
         vset = set(voxels)
     if not vset or _count_components(vset, grid_size) <= 1:
         return vset
-    seen = set()
-    largest = set()
+
+    seen: Set[Tuple[int, int, int]] = set()
+    largest: Set[Tuple[int, int, int]] = set()
     for v in list(vset):
         if v in seen:
             continue
@@ -1026,13 +1114,501 @@ def generate_shape_from_features(features: ShapeFeatureSet) -> dict:
     }
 
 
+def generate_shape_advanced(target_features: ShapeFeatureSet, max_iterations=2000) -> Dict[str, Any]:
+    """
+    LEGACY greedy generator. The active production path is generate_shape_skeleton()
+    in skeleton_generation.py (the "skeleton-first" method described in the paper).
+    Retained for reference, comparison studies, and fidelity benchmarking.
+    Not wired into the game UI.
 
+    Generates a shape attempting to meet targets in ShapeFeatureSet.
+    Focuses on: voxel_count, grid_size, branching_factor, compactness_score, number_of_components.
+    """
+    grid_size = target_features.grid_size
+    target_voxel_count = target_features.voxel_count
+
+    # --- Target values from the ShapeFeatureSet --- 
+    # (using .get() with a default if the feature might not be set by cognitive_mapping)
+    target_bf = target_features.branching_factor if target_features.branching_factor is not None else 1.0 # Target for branching points
+    # Target compactness: 0 (sparse) to 1 (dense). Use provided or default to medium.
+    target_compactness = target_features.compactness_score if target_features.compactness_score is not None else 0.5
+    target_components = target_features.number_of_components if target_features.number_of_components is not None else 1
+    target_planarity = target_features.planarity_score if target_features.planarity_score is not None else 0.7 # Default towards somewhat planar
+    target_bbox_ratio = target_features.bounding_box_ratio if target_features.bounding_box_ratio is not None else 2.0 # Default towards somewhat elongated
+    target_dominant_axis = target_features.dominant_axis if target_features.dominant_axis is not None else 'balanced'
+    target_anisotropy_index = target_features.anisotropy_index if target_features.anisotropy_index is not None else 0.3 # Default to slightly anisotropic/interesting
+    target_shape_form_index = target_features.shape_form_index if target_features.shape_form_index is not None else 0.0 # Default to intermediate form
+    # Graph-cycle target: prefer the explicit circuit_rank target; fall back to
+    # betti_1 for older callers that only set the topological target.
+    if target_features.circuit_rank is not None:
+        target_circuit_rank = target_features.circuit_rank
+    elif target_features.betti_1 is not None:
+        target_circuit_rank = target_features.betti_1
+    else:
+        target_circuit_rank = 0
+
+    voxels_set: Set[Tuple[int, int, int]] = set()
+    
+    # Start with a seed voxel (or multiple if target_components > 1 initially)
+    # For simplicity, start with one component at the center, then try to split if needed (harder).
+    # Or, if target_components > 1, seed multiple points.
+    if target_components > 1 and target_voxel_count >= target_components:
+        for i in range(target_components):
+             # Try to place seeds somewhat apart if possible
+            tries = 0
+            while tries < 10:
+                seed = (random.randint(0, grid_size[0]-1), 
+                        random.randint(0, grid_size[1]-1), 
+                        random.randint(0, grid_size[2]-1))
+                if seed not in voxels_set: # Basic check for overlap with other seeds
+                    # More robust: check min distance from other seeds
+                    voxels_set.add(seed)
+                    break
+                tries +=1
+            if len(voxels_set) <= i: # Failed to place a distinct seed
+                 # Fallback for safety, could lead to fewer components than desired
+                 voxels_set.add((grid_size[0]//2 + i, grid_size[1]//2, grid_size[2]//2 % grid_size[2])) 
+    else:
+        voxels_set.add((grid_size[0] // 2, grid_size[1] // 2, grid_size[2] // 2))
+    
+    if not voxels_set: # Ensure at least one voxel if all seeding failed
+        voxels_set.add((grid_size[0] // 2, grid_size[1] // 2, grid_size[2] // 2))
+
+
+    # Iterative refinement/growth
+    # The core idea: explore potential next voxels and pick the one that best matches targets.
+    for iteration in range(max_iterations):
+        if len(voxels_set) >= target_voxel_count:
+            current_components = _count_components(voxels_set, grid_size)
+            if current_components == target_components: # Or is acceptable
+                break # Target met
+            # If component count is wrong, may need more complex ops than just adding
+
+        candidate_voxels: List[Tuple[Tuple[int, int, int], float]] = [] # (voxel, score)
+
+        # Consider adding voxels
+        potential_add_sites = set()
+        for voxel in voxels_set:
+            for neighbor in _get_neighbors(voxel, grid_size):
+                if neighbor not in voxels_set:
+                    potential_add_sites.add(neighbor)
+        
+        if not potential_add_sites and len(voxels_set) < target_voxel_count:
+             # No place to add, shape is likely filling its space or is fragmented oddly
+             # Try to find any valid empty spot if desperate, or break
+            all_grid_points = set((x,y,z) for x in range(grid_size[0]) for y in range(grid_size[1]) for z in range(grid_size[2]))
+            empty_points = list(all_grid_points - voxels_set)
+            if empty_points and len(voxels_set) > 0: # Add anywhere if stuck and space available
+                voxels_set.add(random.choice(empty_points))
+                continue
+            else:
+                break 
+
+        for cand_add in potential_add_sites:
+            temp_voxels = voxels_set.copy()
+            temp_voxels.add(cand_add)
+            score = 0
+
+            # Score component count (strong preference for target)
+            current_num_comp = _count_components(temp_voxels, grid_size)
+            if current_num_comp == target_components:
+                score += 1000
+            else:
+                # Penalize if it moves away from target (e.g. connects components when we want separate)
+                score -= abs(current_num_comp - target_components) * 500 
+            
+            # Score compactness (how close to target_compactness)
+            c_compactness = _calculate_compactness_score(temp_voxels, grid_size)
+            score -= abs(c_compactness - target_compactness) * 100 # Lower is better
+
+            # Score branching factor
+            c_bf = _calculate_branching_factor(temp_voxels, grid_size)
+            score -= abs(c_bf - target_bf) * 50 # Lower is better
+            
+            # Score planarity
+            c_planarity = _calculate_planarity_score(temp_voxels, grid_size)
+            # Score difference from target planarity (1.0 is perfectly flat)
+            score -= abs(c_planarity - target_planarity) * 75 # Weight for planarity, adjust as needed
+            
+            # Score bounding_box_ratio - REMOVED from active scoring
+            # c_bbox_ratio = _calculate_bounding_box_ratio(temp_voxels)
+            # score -= abs(c_bbox_ratio - target_bbox_ratio) * 40 # Weight for bbox_ratio
+            
+            # Score dominant_axis - REMOVED from active scoring
+            # current_dominant_axis_score_weight = 10 
+            # if len(temp_voxels) > 2: 
+            #     current_dims = _calculate_bounding_box_dimensions(temp_voxels)
+            #     dx, dy, dz = current_dims
+            #     max_dim_for_norm = max(1, dx, dy, dz)
+            #     norm_dx, norm_dy, norm_dz = dx/max_dim_for_norm, dy/max_dim_for_norm, dz/max_dim_for_norm
+            #     axis_score = 0
+            #     if target_dominant_axis == 'x':
+            #         if dx > dy and dx > dz: axis_score += (current_dominant_axis_score_weight * 0.75)
+            #         if dy > dx or dz > dx: axis_score -= (current_dominant_axis_score_weight * 0.5)
+            #         if dy + dz > 0: axis_score += (norm_dx - (norm_dy + norm_dz)/2) * current_dominant_axis_score_weight 
+            #         else: axis_score += norm_dx * (current_dominant_axis_score_weight * 0.5)
+            #     elif target_dominant_axis == 'y':
+            #         if dy > dx and dy > dz: axis_score += (current_dominant_axis_score_weight * 0.75)
+            #         if dx > dy or dz > dy: axis_score -= (current_dominant_axis_score_weight * 0.5)
+            #         if dx + dz > 0: axis_score += (norm_dy - (norm_dx + norm_dz)/2) * current_dominant_axis_score_weight
+            #         else: axis_score += norm_dy * (current_dominant_axis_score_weight * 0.5)
+            #     elif target_dominant_axis == 'z':
+            #         if dz > dx and dz > dy: axis_score += (current_dominant_axis_score_weight * 0.75)
+            #         if dx > dz or dy > dz: axis_score -= (current_dominant_axis_score_weight * 0.5)
+            #         if dx + dy > 0: axis_score += (norm_dz - (norm_dx + norm_dy)/2) * current_dominant_axis_score_weight
+            #         else: axis_score += norm_dz * (current_dominant_axis_score_weight * 0.5)
+            #     elif target_dominant_axis == 'balanced':
+            #         if dx > 0 and dy > 0 and dz > 0:
+            #             dim_mean = (norm_dx + norm_dy + norm_dz) / 3.0
+            #             variance = ((norm_dx - dim_mean)**2 + (norm_dy - dim_mean)**2 + (norm_dz - dim_mean)**2) / 3.0
+            #             axis_score -= variance * (current_dominant_axis_score_weight * 4) 
+            #         else: 
+            #             axis_score -= (current_dominant_axis_score_weight * 0.5)
+            #     score += axis_score
+            
+            # Score anisotropy_index
+            c_pca_eigenvalues = _get_pca_eigenvalues(temp_voxels)
+            c_anisotropy = _calculate_anisotropy_index(c_pca_eigenvalues)
+            score -= abs(c_anisotropy - target_anisotropy_index) * 150 
+
+            # Score shape_form_index, especially if the shape is meant to be anisotropic
+            if target_anisotropy_index > 0.3: # Only strongly consider form if anisotropy is targeted
+                c_shape_form = _calculate_shape_form_index(c_pca_eigenvalues)
+                # Penalize deviation from target form. Weight might be less than anisotropy itself.
+                score -= abs(c_shape_form - target_shape_form_index) * 75 
+
+            # Score graph-cycle structure as circuit rank μ (the quantity the
+            # generator controls; cheap O(|V|) — cubical β₁ is measured
+            # post-generation, not in this scoring loop).
+            c_circuit_rank = _calculate_circuit_rank(temp_voxels, grid_size)
+            score -= abs(c_circuit_rank - target_circuit_rank) * 75
+
+            # Small bonus for just getting closer to voxel count
+            score += (len(temp_voxels) / target_voxel_count) * 10
+
+            candidate_voxels.append((cand_add, score))
+
+        if not candidate_voxels:
+            if len(voxels_set) < target_voxel_count:
+                # This case means no potential_add_sites were found or scored, very stuck
+                # Try to add a random voxel not connected if below target count and stuck
+                all_grid_points = set((x,y,z) for x in range(grid_size[0]) for y in range(grid_size[1]) for z in range(grid_size[2]))
+                available_random_points = list(all_grid_points - voxels_set)
+                if available_random_points:
+                    voxels_set.add(random.choice(available_random_points))
+                    continue # Try next iteration
+            break # No good candidates, or truly stuck
+
+        candidate_voxels.sort(key=lambda x: x[1], reverse=True) # Best score first
+        
+        # Add the best candidate
+        if candidate_voxels: # Ensure there is at least one candidate
+            best_cand_voxel, best_score = candidate_voxels[0]
+            voxels_set.add(best_cand_voxel)
+        else:
+            # If somehow no candidates are left, break
+            break
+
+    # Post-generation cleanup/adjustment (optional)
+    # If too many voxels, remove some (e.g., those that least impact desired features)
+    while len(voxels_set) > target_voxel_count:
+        if not voxels_set: break
+        # Simple removal: random voxel that doesn't disconnect if components=1
+        removable_voxels = list(voxels_set)
+        random.shuffle(removable_voxels)
+        removed = False
+        for rv in removable_voxels:
+            temp_voxels = voxels_set.copy()
+            temp_voxels.remove(rv)
+            if not temp_voxels or _count_components(temp_voxels, grid_size) == target_components:
+                voxels_set.remove(rv)
+                removed = True
+                break
+        if not removed and voxels_set: # Fallback: just remove any voxel
+             voxels_set.pop()
+
+    # --- Prepare output --- 
+    # The returned 'features' dict should ideally be the *actual* calculated features of the final shape.
+    # For now, we return the input target_features, but add the actual voxel_count.
+    analyzed_sfs = analyze_shape_features(voxels_set, grid_size, input_sfs=target_features)
+
+    print(f"Advanced generation: Target voxels: {target_voxel_count}, Actual: {analyzed_sfs.voxel_count}")
+    print(f"  Target compactness: {target_compactness:.2f}, Actual: {analyzed_sfs.compactness_score:.2f}")
+    print(f"  Target branching: {target_bf}, Actual: {analyzed_sfs.branching_factor}")
+    print(f"  Target components: {target_components}, Actual: {analyzed_sfs.number_of_components}")
+    print(f"  Target planarity: {target_planarity:.2f}, Actual: {analyzed_sfs.planarity_score:.2f}")
+    print(f"  Target BBox Ratio: {target_bbox_ratio:.2f}, Actual: {analyzed_sfs.bounding_box_ratio:.2f}")
+    print(f"  Target Dominant Axis: {target_dominant_axis}, Actual: {analyzed_sfs.dominant_axis}")
+    print(f"  Target Anisotropy Index: {target_anisotropy_index:.2f}, Actual: {analyzed_sfs.anisotropy_index:.2f}")
+    print(f"  Target Shape Form Index: {target_shape_form_index:.2f}, Actual: {analyzed_sfs.shape_form_index:.2f}")
+    print(f"  Target circuit rank: {target_circuit_rank}, Actual: {analyzed_sfs.circuit_rank} (measured β₁: {analyzed_sfs.betti_1})")
+
+    return {
+        "voxels": list(voxels_set),
+        "grid_size": list(grid_size),
+        "features": analyzed_sfs.to_dict()
+    }
+
+def generate_shape_heuristic_v1(features: ShapeFeatureSet) -> dict:
+    """
+    Generate a voxel-based shape using interpretable features, based on user's suggestion.
+    Directly influences: voxel_count, planarity_score, branching_factor, compactness_score.
+    - planarity_score (0.0 = mostly flat, higher = more 3D spread)
+    - branching_factor (0 = more linear, higher = more arms/branches)
+    - compactness_score (0.0 = sparse/less connected, 1.0 = more compact/connected)
+    """
+    # Extract values from ShapeFeatureSet, providing defaults if not set
+    target_voxel_count = features.voxel_count
+    planarity = features.planarity_score if features.planarity_score is not None else 0.5
+    branching = features.branching_factor if features.branching_factor is not None else 1
+    compactness = features.compactness_score if features.compactness_score is not None else 0.5
+    grid_size_tuple = features.grid_size # Should always be present in ShapeFeatureSet
+
+    center = [grid_size_tuple[0] // 2, grid_size_tuple[1] // 2, grid_size_tuple[2] // 2]
+    
+    # Use a set for efficient addition and checking
+    voxels_set: Set[Tuple[int,int,int]] = set()
+    if target_voxel_count > 0: # Ensure we add at least one if count > 0
+        voxels_set.add(tuple(center))
+
+    # Convert voxels_set to list when random.choice is needed and it's guaranteed not empty
+    
+    def get_local_neighbors(v: Tuple[int, int, int]) -> List[Tuple[int, int, int]]:
+        x, y, z = v
+        return [
+            (x + 1, y, z), (x - 1, y, z),
+            (x, y + 1, z), (x, y - 1, z),
+            (x, y, z + 1), (x, y, z - 1)
+        ]
+
+    for _ in range(target_voxel_count - len(voxels_set)): # Iterate for remaining voxels
+        if not voxels_set: # Should not happen if target_voxel_count > 0
+            break
+
+        current_voxels_list = list(voxels_set) # Get a list copy for random.choice
+
+        if random.random() < compactness and len(current_voxels_list) > 0:
+            # Prefer attachment to existing voxels (dense growth)
+            # Pick any existing voxel as base
+            base = random.choice(current_voxels_list)
+        elif len(current_voxels_list) > 0:
+            # Occasionally use an early voxel for sparse growth (e.g. the first one)
+            base = current_voxels_list[0] 
+        else: # Should be unreachable if loop condition is correct
+            continue
+
+        possible_next_positions = get_local_neighbors(base)
+        random.shuffle(possible_next_positions)
+        
+        added_this_step = False
+        for pos_tuple in possible_next_positions:
+            # Ensure pos is a tuple for set operations
+            
+            if pos_tuple not in voxels_set and all(0 <= pos_tuple[i] < grid_size_tuple[i] for i in range(3)):
+                final_pos = list(pos_tuple) # Make it a list to modify z
+
+                # Adjust z based on planarity
+                # planarity = 0 means very flat (stick to center z)
+                # planarity = 1 means full 3D freedom
+                
+                # Determine allowed z range based on planarity
+                # Max deviation from center z: (grid_size_z / 2 - 0.5) * planarity
+                # Example: grid_size_z=7, center_z=3. Max_dev = (3.5-0.5)*planarity = 3*planarity
+                # If planarity=0, z_dev=0 (center_z only)
+                # If planarity=0.5, z_dev=1.5 (center_z, center_z +/- 1)
+                # If planarity=1, z_dev=3 (center_z +/- 3, i.e. full range 0 to 6)
+
+                z_deviation_range = int(round((grid_size_tuple[2] / 2.0) * planarity))
+                min_z_allowed = max(0, center[2] - z_deviation_range)
+                max_z_allowed = min(grid_size_tuple[2] - 1, center[2] + z_deviation_range)
+                
+                # If the proposed z is outside this allowed range, try to clamp it or pick one within range.
+                # For simplicity here, we'll just say if the *original* z of the neighbor is in range, it's fine.
+                # A more direct planarity influence would be to pick Z from the allowed range.
+                if not (min_z_allowed <= final_pos[2] <= max_z_allowed):
+                    # If the neighbor's natural Z is too far, we might skip it or adjust it.
+                    # For this version, let's adjust it to be within the allowed planar slice
+                    # This is a strong planarity enforcement
+                    if planarity < 0.33: # Highly planar
+                         final_pos[2] = center[2]
+                    elif planarity < 0.66: # Moderately planar
+                         final_pos[2] = random.choice([max(0,center[2]-1), center[2], min(grid_size_tuple[2]-1, center[2]+1)])
+                    # else: full 3D, no change to final_pos[2] from pos_tuple[2]
+                
+                # Ensure the (potentially modified) position is still valid and not occupied
+                final_pos_tuple = tuple(final_pos)
+                if final_pos_tuple not in voxels_set and all(0 <= final_pos_tuple[i] < grid_size_tuple[i] for i in range(3)):
+                    voxels_set.add(final_pos_tuple)
+                    added_this_step = True
+                    break 
+        
+        if not added_this_step and len(voxels_set) < target_voxel_count and len(voxels_set) > 0:
+            # Could not add by attaching to 'base'. Try picking another base or a random valid empty spot.
+            # For simplicity, if stuck, just break or add one more randomly if space.
+            all_grid_points = set((x,y,z) for x in range(grid_size_tuple[0]) for y in range(grid_size_tuple[1]) for z in range(grid_size_tuple[2]))
+            empty_points = list(all_grid_points - voxels_set)
+            if empty_points:
+                voxels_set.add(random.choice(empty_points))
+
+
+    # Apply branching: add "arms" from existing voxels
+    # This is a post-processing step to ensure branching factor is met, can increase voxel count
+    # A more integrated way would be to bias a growth rule towards branching during main loop.
+    current_voxels_list_for_branching = list(voxels_set)
+    if branching > 0 and len(current_voxels_list_for_branching) > 0:
+        for _ in range(int(round(branching))): # Number of "arms" to try and add
+            if len(voxels_set) >= target_voxel_count + int(round(branching * 2)): # Cap total voxels
+                break
+            
+            base_for_branch = random.choice(current_voxels_list_for_branching) # Pick any existing voxel
+            
+            # Try to add a short arm (1-2 voxels)
+            arm_length = random.choice([1,2])
+            current_arm_tip = base_for_branch
+            
+            for _ in range(arm_length):
+                branch_neighbors = get_local_neighbors(current_arm_tip)
+                random.shuffle(branch_neighbors)
+                added_to_arm = False
+                for neighbor_pos in branch_neighbors:
+                    if neighbor_pos not in voxels_set and all(0 <= neighbor_pos[i] < grid_size_tuple[i] for i in range(3)):
+                        voxels_set.add(neighbor_pos)
+                        current_arm_tip = neighbor_pos # Extend arm from new tip
+                        added_to_arm = True
+                        break # Added one segment to arm
+                if not added_to_arm:
+                    break # Cannot extend this arm further
+
+
+    # Ensure voxel_count doesn't exceed target too much due to branching
+    while len(voxels_set) > target_voxel_count + branching: # Allow some overshoot from branching
+        if not voxels_set: break
+        voxels_set.pop() # Simple removal of random voxel (sets are unordered)
+
+    # Calculate actual features (simple version)
+    final_voxel_count = len(voxels_set)
+    # The input planarity, branching, compactness are what drove the generation.
+    # Actual calculated values might differ, especially with this heuristic approach.
+    # For now, report back the inputs as "features_used"
+    
+    calculated_compactness = _calculate_compactness_score(voxels_set, grid_size_tuple)
+    calculated_branching = _calculate_branching_factor(voxels_set, grid_size_tuple)
+    # A simple planarity actual measurement: ratio of voxels in the most populated Z-plane
+    actual_planarity_score = 0.0
+    if voxels_set:
+        z_counts = {}
+        for v_x,v_y,v_z in voxels_set:
+            z_counts[v_z] = z_counts.get(v_z, 0) + 1
+        if z_counts:
+            max_in_plane = max(z_counts.values())
+            actual_planarity_score = max_in_plane / len(voxels_set)
+            # This definition of planarity is: 1.0 = all in one plane, low = spread out.
+            # This is OPPOSITE to the user's definition in the function (0.0 = flat, 1.0 = 3D spread)
+            # So we need to invert it if we want to match user's definition for the output
+            # User definition: planarity_score (0.0 = flat, 1.0 = 3D spread)
+            # Our calculation: max_in_plane / total (1.0 = flat)
+            # So, actual_planarity_to_report = 1.0 - actual_planarity_score
+            actual_planarity_to_report = 1.0 - actual_planarity_score
+
+    analyzed_sfs = analyze_shape_features(voxels_set, grid_size_tuple, input_sfs=features)
+
+    return {
+        "voxels": [list(v) for v in voxels_set], # Convert set of tuples to list of lists
+        "grid_size": list(grid_size_tuple),
+        "features_used": { # These are the input targets that drove this specific generator
+            "target_voxel_count": target_voxel_count,
+            "target_planarity_score_input": planarity, # The 0-1 value where 0=flat
+            "target_branching_factor_input": branching,
+            "target_compactness_score_input": compactness,
+            "actual_voxel_count": final_voxel_count,
+            "calculated_compactness_score_heuristic": calculated_compactness, # Using the _calculate function
+            "calculated_branching_factor_heuristic": calculated_branching, # Using the _calculate function
+            "calculated_planarity_score_heuristic": actual_planarity_to_report # 1.0 = 3D spread
+        },
+        "features": analyzed_sfs.to_dict()
+    }
+
+# Example usage (can be called from main.py or another script)
 if __name__ == "__main__":
     print("--- Testing Simple Generator ---")
     simple_test_features = ShapeFeatureSet(
         voxel_count=8,
-        grid_size=(5, 5, 5),
+        grid_size=(5,5,5),
         branching_factor=1
     )
     simple_shape = generate_shape_from_features(simple_test_features)
     print(f"Simple shape: {len(simple_shape['voxels'])} voxels. Features: {simple_shape['features']}")
+
+    print("\n--- Testing Advanced Generator ---")
+    # Create a target feature set (e.g., from cognitive_mapping.py or manually)
+    adv_target_features = ShapeFeatureSet(
+        voxel_count=12,
+        grid_size=(7, 7, 7),
+        compactness_score=0.7,  # Target high compactness
+        branching_factor=1,    # Target low branching
+        number_of_components=1
+        # Other features like symmetry_class, planarity_score etc. are in the SFS
+        # but not actively used by this version of generate_shape_advanced's scoring.
+    )
+    advanced_shape = generate_shape_advanced(adv_target_features, max_iterations=50 * adv_target_features.voxel_count)
+    print(f"Advanced shape: {len(advanced_shape['voxels'])} voxels.")
+    print(f"Features (targets + some calculated): {advanced_shape['features']}")
+
+    adv_target_features_multi_component = ShapeFeatureSet(
+        voxel_count=15,
+        grid_size=(10, 10, 10),
+        compactness_score=0.3,  # Target low compactness (more spread for multi-component)
+        branching_factor=3,    
+        number_of_components=3 # Target multiple components
+    )
+    adv_shape_multi = generate_shape_advanced(adv_target_features_multi_component, max_iterations=50 * adv_target_features_multi_component.voxel_count)
+    print(f"Advanced multi-component shape: {len(adv_shape_multi['voxels'])} voxels.")
+    print(f"Features (targets + some calculated): {adv_shape_multi['features']}")
+
+    print("\n--- Testing Advanced Generator with Planarity ---")
+    adv_target_planar = ShapeFeatureSet(
+        voxel_count=12,
+        grid_size=(7, 7, 7),
+        compactness_score=0.6,
+        branching_factor=1,
+        number_of_components=1,
+        planarity_score=0.9 # Target very flat
+    )
+    advanced_shape_planar = generate_shape_advanced(adv_target_planar, max_iterations=50 * adv_target_planar.voxel_count)
+    print(f"Advanced planar shape: {len(advanced_shape_planar['voxels'])} voxels.")
+    print(f"Features (targets + some calculated): {advanced_shape_planar['features']}")
+
+    adv_target_3d = ShapeFeatureSet(
+        voxel_count=12,
+        grid_size=(7, 7, 7),
+        compactness_score=0.4,
+        branching_factor=2,
+        number_of_components=1,
+        planarity_score=0.3 # Target more 3D (less planar)
+    )
+    advanced_shape_3d = generate_shape_advanced(adv_target_3d, max_iterations=50 * adv_target_3d.voxel_count)
+    print(f"Advanced 3D shape: {len(advanced_shape_3d['voxels'])} voxels.")
+    print(f"Features (targets + some calculated): {advanced_shape_3d['features']}")
+
+    print("\n--- Testing Heuristic Generator V1 (User Suggested) ---")
+    heuristic_targets = ShapeFeatureSet(
+        voxel_count=15,
+        grid_size=(10,10,10),
+        planarity_score=0.1,  # Target very flat (0 = flat, 1 = 3D for this func)
+        branching_factor=3,   # Target some branches
+        compactness_score=0.8 # Target quite compact
+    )
+    heuristic_shape = generate_shape_heuristic_v1(heuristic_targets)
+    print(f"Heuristic shape: {len(heuristic_shape['voxels'])} voxels.")
+    print(f"Features used/calculated: {heuristic_shape['features_used']}")
+
+    heuristic_targets_3d = ShapeFeatureSet(
+        voxel_count=15,
+        grid_size=(10,10,10),
+        planarity_score=0.9,  # Target very 3D
+        branching_factor=1,   # Target few branches
+        compactness_score=0.3 # Target sparse
+    )
+    heuristic_shape_3d = generate_shape_heuristic_v1(heuristic_targets_3d)
+    print(f"Heuristic 3D shape: {len(heuristic_shape_3d['voxels'])} voxels.")
+    print(f"Features used/calculated: {heuristic_shape_3d['features_used']}")

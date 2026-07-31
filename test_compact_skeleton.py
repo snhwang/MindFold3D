@@ -34,7 +34,7 @@ from skeleton_generation import (
     _compute_symmetry_score_for_gate,
     _get_neighbors,
     _count_components,
-    _calculate_cycle_count,
+    _calculate_circuit_rank,
 )
 from shape_generation import analyze_shape_features
 from shape_features import ShapeFeatureSet
@@ -297,7 +297,7 @@ def _optimize_relaxed_branching(
             total += dim_dev
         return total
 
-    topo_cycles = _calculate_cycle_count(voxels, grid_size)
+    topo_cycles = _calculate_circuit_rank(voxels, grid_size)
     topo_components = _count_components(voxels, grid_size)
     # KEY DIFFERENCE: no branching constraint
     cycle_tol = 0
@@ -305,7 +305,7 @@ def _optimize_relaxed_branching(
     def _topo_filter(trial):
         if _count_components(trial, grid_size) != topo_components:
             return False
-        if abs(_calculate_cycle_count(trial, grid_size) - topo_cycles) > cycle_tol:
+        if abs(_calculate_circuit_rank(trial, grid_size) - topo_cycles) > cycle_tol:
             return False
         # Branching is FREE to change — this is the relaxation
         return True

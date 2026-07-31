@@ -953,10 +953,11 @@
     #coaching-panel.coaching-modal #coaching-next-btn { display: block; }
     #coaching-next-btn:hover { background: #5848d6; }
 
-    /* ── Builder mode: responsive viewers (portrait phones) ──
-       The inline style sets viewer width/height to 250px. On phones
-       narrower than 640 we cap at 90vw so the canvas doesn't clip. */
-    @media (max-width: 640px) and (orientation: portrait) {
+    /* ── Builder mode: responsive viewers ──
+       The inline style sets width/height to 250px; on phones that is fine
+       (250 < 440) but on very narrow screens or in landscape it can clip.
+       Use min() so the viewer never exceeds 250px and never exceeds 90vw. */
+    @media (max-width: 640px) {
       #builder-area #builder-target,
       #builder-area #builder-workspace {
         width: min(250px, 90vw) !important;
@@ -965,33 +966,17 @@
       #builder-area > div > div { align-items: center !important; }
     }
 
-    /* ── Builder mode: scrollable body ──
-       Body is normally `position: fixed; overflow: hidden` (required by
-       MC mode). Builder needs ~700px which doesn't fit on iPhone SE
-       (667) or any phone in landscape. Releasing the body restores
-       normal page scrolling so portrait users can reach the buttons. */
-    body.builder-active {
-      position: static;
-      height: auto;
-      min-height: 100%;
-      overflow: visible;
-      overflow-y: auto;
-    }
-    body.builder-active #builder-area {
-      padding-bottom: env(safe-area-inset-bottom, 16px);
-    }
-    body.builder-active #builder-area > div > div:last-child {
-      margin-bottom: 16px !important;
+    /* ── Task settings bar: allow wrapping on narrow screens ──
+       Before mc-active kicks in, the settings row can overflow at ~440px. */
+    #task-settings {
+      flex-wrap: wrap;
+      row-gap: 6px;
     }
 
     /* ── Portrait-only on phones ──
-       The MC fit-to-viewport layout and the Builder column layout are
-       both designed for portrait phones. Landscape on a phone-sized
-       screen reliably clips controls (the Builder action button row
-       falls below the fold; MC settings squeeze together). Rather than
-       fight this with mode-specific landscape CSS, show a friendly
-       overlay asking the user to rotate. Tablets and desktops are
-       unaffected (gated on max-width: 900px). */
+       Phone landscape clips controls in both MC and Builder modes.
+       Show a friendly overlay asking the user to rotate. Tablets and
+       desktops are unaffected (gated on max-width: 900px). */
     #portrait-lock-overlay {
       display: none;
       position: fixed;
@@ -1024,27 +1009,15 @@
       50% { transform: rotate(0deg); }
     }
     @media (max-width: 900px) and (orientation: landscape) {
-      #portrait-lock-overlay { display: flex; }
-      /* Hide everything else so the overlay is the only thing the user
-         sees (and we don't pay the cost of laying out a broken UI
-         underneath). */
-      body > *:not(#portrait-lock-overlay) { visibility: hidden; }
-    }
-
-    /* ── Task settings bar: allow wrapping on narrow screens ──
-       Before mc-active kicks in, the settings row can overflow at ~440px. */
-    #task-settings {
-      flex-wrap: wrap;
-      row-gap: 6px;
+      #portrait-lock-overlay { display: flex !important; }
+      body > *:not(#portrait-lock-overlay) { visibility: hidden !important; }
     }
 
   </style>
 </head>
 
 <body>
-  <!-- Portrait-only overlay: shown on phone-sized landscape viewports.
-       Pure CSS handles visibility via the @media rule above; we don't
-       need any JS to toggle this. -->
+  <!-- Portrait-only overlay: shown on phone-sized landscape viewports. -->
   <div id="portrait-lock-overlay" role="dialog" aria-modal="true" aria-label="Rotate your device">
     <div class="icon" aria-hidden="true">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1524,7 +1497,7 @@
       }
     }
 
-    // ── Coaching helpers ─────────────────────────────────────────
+    // ── Coaching helpers ─────────────────────────────────────────────────
     // The AI Coach is now shown as a centered modal (with a backdrop) so it
     // doesn't permanently consume the bottom of the play area on phones.
     // After-answer coaching also pauses the auto-advance until the user
@@ -2338,7 +2311,10 @@
         document.getElementById('error').textContent = 'Error updating score: ' + err.message;
       }
 
-      // Fire coaching feedback asynchronously (non-blocking)
+      // Decide whether to show the AI Coach popup. When enabled, auto-advance
+      // is paused until the user dismisses the modal (the dismiss handler
+      // runs window._pendingCoachAdvance). When disabled, fall through to
+      // the original 1-second auto-advance.
       const targetFeatures = (window.currentTarget && window.currentTarget.features)
         ? JSON.parse(JSON.stringify(window.currentTarget.features)) : {};
       const advance = () => {
@@ -2348,6 +2324,8 @@
       if (isCoachEnabled()) {
         window._pendingCoachAdvance = advance;
         showCoachingFeedback(correct, responseTime, targetFeatures, interactionData);
+        // Safety net: if coaching never resolves and the user never clicks,
+        // never advance silently — they have a visible Next button anyway.
       } else {
         setTimeout(advance, 1000);
       }
@@ -2887,10 +2865,6 @@
         // Builder mode wants header + mode-nav visible; clear the focused
         // MC body classes so they're never lingering.
         document.body.classList.remove('mc-active', 'mc-settings-open');
-        // Builder is taller than the viewport on short phones; let body
-        // scroll so the action buttons are reachable. See the
-        // `body.builder-active` rule in the stylesheet for details.
-        document.body.classList.add('builder-active');
 
         // Update button styles
         const recognitionBtn = document.getElementById('recognition-mode-btn');
@@ -2963,9 +2937,6 @@
       document.body.classList.add('mc-active');
       // Settings panel starts collapsed every time we re-enter MC mode.
       document.body.classList.remove('mc-settings-open');
-      // Drop the builder scroll override — MC mode needs the fixed,
-      // unscrolled body for its fit-to-viewport layout.
-      document.body.classList.remove('builder-active');
 
       // Update button styles
       document.getElementById('builder-mode-btn').style.background = '#888';

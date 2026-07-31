@@ -1,7 +1,7 @@
 """
 MindFold 3D — Adaptive Spatial Cognition Assessment and Training Server.
 
-Copyright (c) 2024-2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
+Copyright (c) 2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
 Patent pending. See docs/PATENT_SPECIFICATION.md for claims.
 
 This module implements the Task Presentation Engine, Tiered Distractor
@@ -33,7 +33,7 @@ import auth_routes
 import models
 from database import engine, SessionLocal
 from shape_features import ShapeFeatureSet
-from shape_generation import generate_shape_from_features, generate_mirror_reflection, generate_part_permuted_distractor, analyze_shape_features, canonical_voxel_form, nudge_voxels_until_unique, keep_largest_component
+from shape_generation import generate_shape_from_features, generate_shape_advanced, generate_mirror_reflection, generate_part_permuted_distractor, analyze_shape_features, canonical_voxel_form, nudge_voxels_until_unique, keep_largest_component
 from skeleton_generation import generate_shape_skeleton
 from cognitive_mapping import get_difficulty_spec, get_skeleton_spec, perturb_skeleton_spec, SHAPE_DIMENSIONS, TASK_DIMENSIONS, reverse_map_cognitive_profile, cognitive_profile_to_dict
 import json
@@ -74,6 +74,17 @@ app.include_router(auth_routes.router)
 # Per-user runtime state — the only top-level key in use is "per_user".
 # All per-session counters and feature stats live under
 # session_data["per_user"][session_key] (see get_user_runtime_state).
+# Shape of each per-user entry:
+#   {
+#       "recent_target_canonicals": [<canonical>, ...],
+#       "target_buffer": {mode_key: [<buffer_entry>, ...]},
+#       "question_counter": <int>,
+#       "total_questions": <int>,
+#       "correct_answers": <int>,
+#       "attempts": [...],
+#       "feature_errors": {...},
+#       "feature_stats": {...},
+#   }
 # Kept in memory only; nothing here is persisted to the database.
 session_data = {
     "per_user": {},
@@ -87,55 +98,6 @@ persistent_data = {
     "feature_errors": {},
     "feature_stats": {}
 }
-
-def get_session_key(user) -> str:
-    """Return the in-memory session key for *user*.
-
-    Authenticated users are keyed by their string-cast integer PK.
-    In public, auth.get_current_user attaches ``user.session_key = str(user.id)``
-    for all users (guests have real PKs via create_guest_user).
-    Falling back to ``str(user.id)`` handles any edge cases.
-    """
-    return getattr(user, "session_key", str(user.id))
-
-
-def get_user_runtime_state(session_key: str) -> dict:
-    """Return (and lazily initialize) the per-user runtime state dict.
-
-    The returned dict lives under ``session_data["per_user"][session_key]``
-    and holds target-buffering state (``recent_target_canonicals``,
-    ``target_buffer``, ``question_counter``) as well as per-session stats
-    (``total_questions``, ``correct_answers``, ``attempts``,
-    ``feature_stats``, ``feature_errors``).
-
-    Using a per-user key means concurrent users never share in-memory state.
-    """
-    per_user = session_data.setdefault("per_user", {})
-    state = per_user.get(session_key)
-    if state is None:
-        state = {
-            "recent_target_canonicals": [],
-            "target_buffer": {},
-            "question_counter": 0,
-            "total_questions": 0,
-            "correct_answers": 0,
-            "attempts": [],
-            "feature_errors": {},
-            "feature_stats": {},
-        }
-        per_user[session_key] = state
-    else:
-        # Backfill missing keys for users whose state predates a field.
-        state.setdefault("recent_target_canonicals", [])
-        state.setdefault("target_buffer", {})
-        state.setdefault("question_counter", 0)
-        state.setdefault("total_questions", 0)
-        state.setdefault("correct_answers", 0)
-        state.setdefault("attempts", [])
-        state.setdefault("feature_errors", {})
-        state.setdefault("feature_stats", {})
-    return state
-
 
 class ShapeResponse(BaseModel):
     id: str
@@ -190,7 +152,7 @@ class CoachingResponse(BaseModel):
     model: Optional[str] = None
     latency_ms: Optional[float] = None
 
-# ── Social/link-preview helper ───────────────────────────────────
+# ── Social/link-preview helper ──────────────────────────────────────────
 # When a user shares a link to MindFold 3D in iMessage, WhatsApp, Slack,
 # Discord, etc., those apps look at the page's <head> for Open Graph and
 # Twitter Card meta tags to render a preview card (title, description,
@@ -276,6 +238,14 @@ def serve_license():
     except FileNotFoundError:
         return Response(content="License file not found.", media_type="text/plain", status_code=404)
 
+@app.get("/reset-password")
+def serve_reset_password(request: Request):
+    return _serve_html_with_meta(
+        "static/reset-password.html", request,
+        title="MindFold 3D – Reset Password",
+        description="Reset your MindFold 3D account password.",
+    )
+
 @app.get("/generate-shape")
 def generate_example_shape():
     features = ShapeFeatureSet(
@@ -299,6 +269,415 @@ def generate_custom_shape(features: ShapeFeatureSet = Body(...)):
     shape["id"] = f"custom_{uuid.uuid4().hex[:6]}"
     return shape
 
+def perturb_features(base_sfs: ShapeFeatureSet, distractor_tier: int) -> ShapeFeatureSet:
+    """Create a perturbed feature set for distractor generation.
+    Tier 0 = radical (obvious wrong), Tier 1 = moderate, Tier 2 = subtle.
+    Mirrors UE5 ShapeGenerator::PerturbFeatures().
+    """
+    perturbed = base_sfs.model_copy(deep=True)
+    perturbed.number_of_components = 1
+
+    if distractor_tier == 0:
+        # Tier 0 (RADICAL): obviously different shape - easy to eliminate
+        perturbed.voxel_count = random.randint(5, 7)
+        perturbed.compactness_score = random.uniform(0.1, 0.3)
+        perturbed.branching_factor = random.randint(4, 6)
+        perturbed.planarity_score = random.uniform(0.1, 0.3)
+    else:
+        # Feature pool for perturbation
+        feature_names = ["voxel_count", "compactness_score", "planarity_score",
+                         "branching_factor", "anisotropy_index", "shape_form_index",
+                         "circuit_rank"]
+        random.shuffle(feature_names)
+
+        # Tier 1 (MODERATE): 3-4 features at full scale
+        # Tier 2 (SUBTLE): 1-2 features at reduced scale
+        if distractor_tier == 1:
+            num_perturbations = random.randint(3, 4)
+            perturb_scale = 1.0
+        else:  # Tier 2
+            num_perturbations = random.randint(1, 2)
+            perturb_scale = 0.6
+
+        for idx in range(min(num_perturbations, len(feature_names))):
+            feature = feature_names[idx]
+            if feature == "voxel_count":
+                delta = random.choice([-2, -1, 1, 2])
+                if distractor_tier == 2:
+                    delta = random.choice([-1, 1])
+                perturbed.voxel_count += delta
+            elif feature == "compactness_score":
+                perturbed.compactness_score = (perturbed.compactness_score or 0.5) + random.uniform(-0.25, 0.25) * perturb_scale
+            elif feature == "planarity_score":
+                perturbed.planarity_score = (perturbed.planarity_score or 0.7) + random.uniform(-0.3, 0.3) * perturb_scale
+            elif feature == "branching_factor":
+                delta = random.choice([-1, 1])
+                if distractor_tier == 1 and random.random() < 0.5:
+                    delta *= 2
+                perturbed.branching_factor = (perturbed.branching_factor or 1) + delta
+            elif feature == "anisotropy_index":
+                perturbed.anisotropy_index = (perturbed.anisotropy_index or 0.3) + random.uniform(-0.3, 0.3) * perturb_scale
+            elif feature == "shape_form_index":
+                delta = random.uniform(0.3, 0.7) * perturb_scale
+                sfi = perturbed.shape_form_index or 0.0
+                if sfi > 0.3:
+                    perturbed.shape_form_index = sfi - delta
+                elif sfi < -0.3:
+                    perturbed.shape_form_index = sfi + delta
+                else:
+                    perturbed.shape_form_index = sfi + random.choice([-1, 1]) * delta
+            elif feature == "circuit_rank":
+                delta = random.choice([-1, 1])
+                perturbed.circuit_rank = max(0, (perturbed.circuit_rank or 0) + delta)
+
+    # Clamp all values to valid ranges (expert grid allows up to 25 voxels)
+    max_voxels = 25 if base_sfs.grid_size == (10, 10, 10) else 15
+    perturbed.voxel_count = max(5, min(max_voxels, perturbed.voxel_count))
+    perturbed.compactness_score = max(0.1, min(0.9, perturbed.compactness_score or 0.5))
+    perturbed.planarity_score = max(0.1, min(0.9, perturbed.planarity_score or 0.7))
+    perturbed.branching_factor = max(0, perturbed.branching_factor or 0)
+    perturbed.anisotropy_index = max(0.0, min(0.95, perturbed.anisotropy_index or 0.0))
+    perturbed.shape_form_index = max(-1.0, min(1.0, perturbed.shape_form_index or 0.0))
+    perturbed.circuit_rank = max(0, perturbed.circuit_rank or 0)
+    perturbed.grid_size = base_sfs.grid_size
+
+    return perturbed
+
+
+# ---------------------------------------------------------------------------
+# Per-user target buffering
+# ---------------------------------------------------------------------------
+# The /get-multiple-choice endpoint used to generate a fresh target shape on
+# every call, which made exact repeats of the same target across back-to-back
+# questions common. We now keep, per user and per mode, a short rolling list
+# of recently-served target canonicals and a small buffer of unused candidate
+# targets. When a new question is requested we first try to reuse a buffered
+# candidate whose canonical is not in recent history. If none is suitable we
+# generate a small batch, serve one, and save the rest in the buffer for
+# later questions in the same mode.
+#
+# All state is kept in memory (session_data["per_user"]). Nothing is
+# persisted and the DB schema is unchanged.
+MAX_RECENT_TARGETS = 8
+TARGET_BATCH_SIZE = 6
+MAX_BUFFER_PER_MODE = 12
+MAX_BUFFER_AGE_QUESTIONS = 20
+
+
+def get_session_key(user) -> str:
+    """Return the in-memory session key for *user*.
+
+    Authenticated users are keyed by their string-cast integer PK.
+    Guest users are keyed by the unique UUID embedded in their JWT
+    (set on the user object as ``session_key`` by ``auth.get_current_user``).
+    Falling back to ``str(user.id)`` handles any edge cases.
+    """
+    sk = getattr(user, "session_key", None)
+    if sk is not None:
+        return str(sk)
+    return str(user.id)
+
+
+def get_user_runtime_state(session_key: str) -> dict:
+    """Return (and lazily initialize) the per-user runtime state dict.
+
+    The returned dict lives under ``session_data["per_user"][session_key]``
+    and holds target-buffering state (``recent_target_canonicals``,
+    ``target_buffer``, ``question_counter``) as well as per-session stats
+    (``total_questions``, ``correct_answers``, ``attempts``,
+    ``feature_stats``, ``feature_errors``).
+
+    Using a per-user key means concurrent users — including concurrent guest
+    sessions that each receive a unique JWT-embedded UUID — never share
+    in-memory state.
+    """
+    per_user = session_data.setdefault("per_user", {})
+    state = per_user.get(session_key)
+    if state is None:
+        state = {
+            "recent_target_canonicals": [],
+            "target_buffer": {},
+            "question_counter": 0,
+            "total_questions": 0,
+            "correct_answers": 0,
+            "attempts": [],
+            "feature_errors": {},
+            "feature_stats": {},
+        }
+        per_user[session_key] = state
+    else:
+        # Backfill missing keys for users whose state predates a field.
+        state.setdefault("recent_target_canonicals", [])
+        state.setdefault("target_buffer", {})
+        state.setdefault("question_counter", 0)
+        state.setdefault("total_questions", 0)
+        state.setdefault("correct_answers", 0)
+        state.setdefault("attempts", [])
+        state.setdefault("feature_errors", {})
+        state.setdefault("feature_stats", {})
+    return state
+
+
+def build_mode_key(
+    generation_mode: str,
+    expert_mode: bool,
+    include_mirror: bool,
+    include_part_permuted: bool,
+    perspective_mode: bool,
+) -> str:
+    """Build a stable string key identifying a mode combination.
+
+    Buffered targets are only ever reused within the exact same mode key so
+    that toggling expert / mirror / part-permuted / perspective produces
+    separate buffers.
+    """
+    return (
+        f"{generation_mode}"
+        f"|exp={int(bool(expert_mode))}"
+        f"|mir={int(bool(include_mirror))}"
+        f"|pp={int(bool(include_part_permuted))}"
+        f"|persp={int(bool(perspective_mode))}"
+    )
+
+
+def make_buffer_entry(
+    candidate: dict,
+    mode_key: str,
+    generation_mode: str,
+    expert_mode: bool,
+    include_mirror: bool,
+    include_part_permuted: bool,
+    perspective_mode: bool,
+    question_index: int,
+) -> dict:
+    """Package a candidate payload into a reusable buffer entry.
+
+    ``candidate`` is the dict returned by ``generate_target_candidate``.
+    The returned entry stores enough information to rebuild the target
+    ShapeResponse and its cognitive profile without regenerating geometry.
+    """
+    shape_data = candidate["shape_data"]
+    return {
+        "id": f"target_{uuid.uuid4().hex[:6]}",
+        "voxels": [list(v) for v in shape_data["voxels"]],
+        "grid_size": list(shape_data["grid_size"]),
+        "features": copy.deepcopy(shape_data.get("features") or {}),
+        "canonical": candidate["canonical"],
+        "shape_difficulties": copy.deepcopy(candidate["shape_difficulties"]),
+        "task_difficulties": copy.deepcopy(candidate["task_difficulties"]),
+        "cognitive_profile_data": copy.deepcopy(candidate["cognitive_profile_data"]),
+        "spec": candidate.get("spec"),
+        "skeleton_spec": candidate.get("skeleton_spec"),
+        "mode_key": mode_key,
+        "generation_mode": generation_mode,
+        "expert_mode": bool(expert_mode),
+        "include_mirror": bool(include_mirror),
+        "include_part_permuted": bool(include_part_permuted),
+        "perspective_mode": bool(perspective_mode),
+        "created_at_question_index": int(question_index),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Adaptive difficulty: level -> shape-dimension tier weighting
+# ---------------------------------------------------------------------------
+# The frontend tracks a running `difficultyLevel` (starts at 1, increments
+# every 3 correct answers) and sends it with each /get-multiple-choice call.
+# We convert that integer to per-dimension sampling weights over the
+# cognitive_mapping tiers. Earlier builds called random.choice() uniformly
+# over ["low", "medium", "high"] and ignored the level entirely, so reviewers
+# saw repetitive small shapes. This helper keeps the bidirectional methodology
+# intact (we still sample from the same tier labels the generator already
+# supports, and the verified cognitive profile is still measured post-hoc from
+# the actual voxel output) — we only change the prior distribution over tiers.
+#
+# Non-expert ladder (level is clipped to >=1):
+#   L1:  low=50  med=35  high=15   (warm-up, biased small but still varied)
+#   L2:  low=35  med=40  high=25
+#   L3:  low=25  med=40  high=35   (balanced, peaks at medium)
+#   L4:  low=15  med=40  high=45
+#   L5:  low=10  med=35  high=55
+#   L6+: low=5   med=30  high=65   (cap, still pulls from all three tiers)
+#
+# Previous ladder pinned L1 at low=70 (46% shape-repeat rate measured from
+# 100 targets) and the cap at low=0/high=80 (another 26% repeat rate at L5+).
+# Both extremes pulled from narrow shape spaces: ~5-8 voxel connected shapes
+# have only a handful of canonical forms, and the high-tier component-count
+# constraint (2-3 disconnected pieces) narrows placement variety. Flattening
+# keeps the adaptive progression (mean voxel count still rises with level)
+# while guaranteeing every level draws from all three tiers.
+#
+# Expert mode keeps the existing ["high", "expert"] pool but we bias the split
+# toward "expert" as level rises (also flattened at the cap).
+NON_EXPERT_LEVEL_WEIGHTS = {
+    1: {"low": 50, "medium": 35, "high": 15},
+    2: {"low": 35, "medium": 40, "high": 25},
+    3: {"low": 25, "medium": 40, "high": 35},
+    4: {"low": 15, "medium": 40, "high": 45},
+    5: {"low": 10, "medium": 35, "high": 55},
+}
+NON_EXPERT_LEVEL_WEIGHTS_CAP = {"low": 5, "medium": 30, "high": 65}
+
+EXPERT_LEVEL_WEIGHTS = {
+    1: {"high": 70, "expert": 30},
+    2: {"high": 60, "expert": 40},
+    3: {"high": 50, "expert": 50},
+    4: {"high": 40, "expert": 60},
+    5: {"high": 30, "expert": 70},
+}
+EXPERT_LEVEL_WEIGHTS_CAP = {"high": 25, "expert": 75}
+
+# Voxel-count ranges per tier (mirrors cognitive_mapping.py spatial_scale).
+# We sample within the winning tier so voxel counts span the paper-specified
+# 5-25 range (Section 4.1) instead of the old hardcoded randint(8, 12).
+TIER_VOXEL_RANGES = {
+    "low":    (5, 8),
+    "medium": (9, 13),
+    "high":   (14, 18),
+    "expert": (19, 25),
+}
+
+
+def _weights_for_level(difficulty_level: int, expert_mode: bool) -> dict:
+    """Return a {tier: weight} dict for the given adaptive level."""
+    lvl = max(1, int(difficulty_level or 1))
+    if expert_mode:
+        return EXPERT_LEVEL_WEIGHTS.get(lvl, EXPERT_LEVEL_WEIGHTS_CAP)
+    return NON_EXPERT_LEVEL_WEIGHTS.get(lvl, NON_EXPERT_LEVEL_WEIGHTS_CAP)
+
+
+def sample_tier(weights: dict) -> str:
+    """Weighted-sample a single tier label."""
+    tiers = list(weights.keys())
+    wts = [weights[t] for t in tiers]
+    # random.choices returns a list of length k=1.
+    return random.choices(tiers, weights=wts, k=1)[0]
+
+
+def sample_voxel_count_for_tier(tier: str) -> int:
+    """Sample a voxel count from the given tier's range in cognitive_mapping."""
+    lo, hi = TIER_VOXEL_RANGES.get(tier, (8, 12))
+    return random.randint(lo, hi)
+
+
+def generate_target_candidate(
+    include_mirror: bool = False,
+    include_part_permuted: bool = False,
+    perspective_mode: bool = False,
+    generation_mode: str = "skeleton",
+    expert_mode: bool = False,
+    difficulty_level: int = 1,
+) -> dict:
+    """Generate a single target-shape candidate with supporting metadata.
+
+    This encapsulates the target-generation block that used to live inline
+    in ``get_multiple_choice``. Distractor generation still runs in the
+    endpoint (unchanged); this helper only builds the target.
+
+    Returns a dict with keys:
+        shape_data              -- dict with voxels/grid_size/features
+        shape_difficulties      -- randomized layer-1 difficulties
+        task_difficulties       -- randomized layer-2 difficulties
+        cognitive_profile_data  -- intended + verified cognitive profile
+        spec                    -- the combined difficulty spec
+        skeleton_spec           -- skeleton spec (skeleton mode only)
+        base_target_sfs         -- ShapeFeatureSet used as distractor base
+        canonical               -- canonical voxel form of the target
+    """
+    # 1. Randomize cognitive difficulties using the layered framework.
+    # Each shape dimension (spatial_scale, branching_complexity, etc.) is
+    # independently sampled from the level-weighted tier distribution. This
+    # gives us a mix of feature intensities per shape rather than forcing all
+    # dimensions to the same tier.
+    tier_weights = _weights_for_level(difficulty_level, expert_mode)
+    shape_difficulties = {
+        dim: sample_tier(tier_weights) for dim in SHAPE_DIMENSIONS
+    }
+
+    # Voxel count is driven by the sampled spatial_scale tier when present,
+    # otherwise by a level-appropriate fallback. This replaces the legacy
+    # randint(8, 12) override that made every shape look the same size.
+    spatial_scale_tier = shape_difficulties.get("spatial_scale") or sample_tier(tier_weights)
+    target_question_voxel_count = sample_voxel_count_for_tier(spatial_scale_tier)
+
+    task_difficulty_levels = ["low", "medium", "high"]
+    task_difficulties = {
+        dim: random.choice(task_difficulty_levels) for dim in TASK_DIMENSIONS
+    }
+    task_difficulties["mirror_discrimination"] = "high" if include_mirror else "low"
+    task_difficulties["configural_binding"] = "high" if include_part_permuted else "low"
+    task_difficulties["perspective_taking"] = "high" if perspective_mode else "low"
+
+    # 2. Combined shape targets + task parameters.
+    spec = get_difficulty_spec(
+        shape_difficulties, task_difficulties,
+        target_voxel_count=target_question_voxel_count,
+    )
+    base_target_sfs = spec.shape_features
+    # Ensure target shape is always a single component
+    base_target_sfs.number_of_components = 1
+
+    # 3. Generate the target shape.
+    skeleton_spec = None
+    if generation_mode == "skeleton":
+        skeleton_spec = get_skeleton_spec(
+            shape_difficulties, task_difficulties, target_question_voxel_count
+        )
+        target_shape_data = generate_shape_skeleton(skeleton_spec)
+    else:
+        target_shape_data = generate_shape_advanced(
+            base_target_sfs, max_iterations=75 * base_target_sfs.voxel_count
+        )
+
+    # Serving-layer orphan cleanup for single-component specs.
+    if skeleton_spec is None or getattr(skeleton_spec, "num_components", 1) == 1:
+        _grid_t = tuple(target_shape_data["grid_size"])
+        _largest = keep_largest_component(target_shape_data["voxels"], _grid_t)
+        if len(_largest) != len(target_shape_data["voxels"]):
+            target_shape_data["voxels"] = [list(v) for v in _largest]
+            target_shape_data["features"] = analyze_shape_features(
+                _largest, _grid_t
+            ).model_dump(exclude_none=True)
+
+    # Fallback if generation produced nothing usable.
+    if not target_shape_data.get("voxels"):
+        target_shape_data["voxels"] = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        target_shape_data.setdefault("grid_size", [3, 3, 3])
+        target_shape_data["features"] = analyze_shape_features(
+            {tuple(v) for v in target_shape_data["voxels"]},
+            tuple(target_shape_data["grid_size"]),
+        ).model_dump(exclude_none=True)
+
+    target_features_dict = target_shape_data["features"]
+
+    # Build the verified cognitive profile for this candidate.
+    valid_keys = ShapeFeatureSet.model_fields.keys()
+    target_sfs = ShapeFeatureSet(**{
+        k: v for k, v in target_features_dict.items()
+        if k in valid_keys and v is not None
+    })
+    verified_profile = reverse_map_cognitive_profile(target_sfs, shape_difficulties)
+    cognitive_profile_data = {
+        "intended": {
+            "shape_difficulties": shape_difficulties,
+            "task_difficulties": task_difficulties,
+            "recommended_archetype": spec.recommended_archetype,
+        },
+        "verified": cognitive_profile_to_dict(verified_profile),
+    }
+
+    canonical = canonical_voxel_form(target_shape_data["voxels"])
+
+    return {
+        "shape_data": target_shape_data,
+        "shape_difficulties": shape_difficulties,
+        "task_difficulties": task_difficulties,
+        "cognitive_profile_data": cognitive_profile_data,
+        "spec": spec,
+        "skeleton_spec": skeleton_spec,
+        "base_target_sfs": base_target_sfs,
+        "canonical": canonical,
+    }
 
 
 @app.get("/get-multiple-choice", response_model=ShapeChoiceSet)
@@ -306,116 +685,202 @@ def get_multiple_choice(
     include_mirror: bool = False,
     include_part_permuted: bool = False,
     perspective_mode: bool = False,
+    generation_mode: str = "skeleton",  # "skeleton" (active) or "greedy" (legacy, kept for reference)
     expert_mode: bool = False,
+    difficulty_level: int = 1,
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     print(f"\n=== New Multiple Choice Request (Advanced Generator) ===")
     print(f"User: {current_user.username} (ID: {current_user.id})")
+    print(f"Adaptive difficulty_level: {difficulty_level} (expert_mode={expert_mode})")
     
     try:
-        # 1. Randomize cognitive difficulties using the layered framework
-        if expert_mode:
-            # Expert mode: shape geometry uses high/expert levels, larger voxel range
-            difficulty_levels = ["high", "expert"]
-            target_question_voxel_count = random.randint(15, 25)
-        else:
-            difficulty_levels = ["low", "medium", "high"]
-            target_question_voxel_count = random.randint(8, 12)
+        # ------------------------------------------------------------------
+        # Target selection via per-user, per-mode buffer + recent-history
+        # blacklist. We either reuse a buffered candidate whose canonical
+        # form is not in recent history, or we generate a small fresh batch,
+        # serve one, and save the rest in the buffer for later.
+        # ------------------------------------------------------------------
+        user_state = get_user_runtime_state(get_session_key(current_user))
+        user_state["question_counter"] += 1
+        question_index = user_state["question_counter"]
+        recent_history = user_state["recent_target_canonicals"]
+        target_buffer = user_state["target_buffer"]
 
-        # Layer 1: shape geometry dimensions
-        shape_difficulties = {
-            dim: random.choice(difficulty_levels) for dim in SHAPE_DIMENSIONS
-        }
+        mode_key = build_mode_key(
+            generation_mode=generation_mode,
+            expert_mode=expert_mode,
+            include_mirror=include_mirror,
+            include_part_permuted=include_part_permuted,
+            perspective_mode=perspective_mode,
+        )
+        mode_bucket = target_buffer.setdefault(mode_key, [])
 
-        # Layer 2: task design dimensions (expert mode only affects shape geometry,
-        # task features remain user-controlled via separate toggles)
-        task_difficulty_levels = ["low", "medium", "high"]
-        task_difficulties = {
-            dim: random.choice(task_difficulty_levels) for dim in TASK_DIMENSIONS
-        }
-        # Override task dimensions based on query params
-        task_difficulties["mirror_discrimination"] = "high" if include_mirror else "low"
-        task_difficulties["configural_binding"] = "high" if include_part_permuted else "low"
-        task_difficulties["perspective_taking"] = "high" if perspective_mode else "low"
+        # Prune stale buffered entries (older than MAX_BUFFER_AGE_QUESTIONS).
+        before_prune = len(mode_bucket)
+        mode_bucket[:] = [
+            e for e in mode_bucket
+            if (question_index - e.get("created_at_question_index", question_index))
+            <= MAX_BUFFER_AGE_QUESTIONS
+        ]
+        pruned = before_prune - len(mode_bucket)
+        if pruned > 0:
+            print(f"[target-buffer] Pruned {pruned} stale entries for mode '{mode_key}' "
+                  f"(bucket size {len(mode_bucket)}/{MAX_BUFFER_PER_MODE})")
 
-        # 2. Get combined shape targets + task parameters
+        # Try to reuse a buffered candidate whose canonical is not in recent history.
+        chosen_entry = None
+        chosen_index = -1
+        for idx, entry in enumerate(mode_bucket):
+            if entry["canonical"] not in recent_history:
+                chosen_entry = entry
+                chosen_index = idx
+                break
+        if chosen_entry is not None:
+            mode_bucket.pop(chosen_index)
+            print(f"[target-buffer] Reusing buffered target for user={current_user.id} "
+                  f"mode='{mode_key}' (bucket size now {len(mode_bucket)}, "
+                  f"recent history size {len(recent_history)})")
+
+        if chosen_entry is None:
+            # No suitable buffered candidate; generate a fresh batch.
+            print(f"[target-buffer] Generating batch of {TARGET_BATCH_SIZE} candidates "
+                  f"for user={current_user.id} mode='{mode_key}'")
+            batch_candidates = []
+            for _ in range(TARGET_BATCH_SIZE):
+                try:
+                    cand = generate_target_candidate(
+                        include_mirror=include_mirror,
+                        include_part_permuted=include_part_permuted,
+                        perspective_mode=perspective_mode,
+                        generation_mode=generation_mode,
+                        expert_mode=expert_mode,
+                        difficulty_level=difficulty_level,
+                    )
+                    batch_candidates.append(cand)
+                except Exception as gen_err:
+                    print(f"[target-buffer] Candidate generation failed: {gen_err}")
+
+            if not batch_candidates:
+                # Hard failure: fall through to the outer except handler.
+                raise RuntimeError("No target candidates could be generated.")
+
+            # Deduplicate by canonical within the batch to avoid trivially
+            # storing the same shape twice.
+            seen_canonicals = set()
+            unique_batch = []
+            for cand in batch_candidates:
+                if cand["canonical"] in seen_canonicals:
+                    continue
+                seen_canonicals.add(cand["canonical"])
+                unique_batch.append(cand)
+
+            # Prefer a candidate whose canonical is not in recent history;
+            # otherwise serve the first available candidate (avoids blocking
+            # when every fresh candidate happens to collide with history).
+            serve_candidate = next(
+                (c for c in unique_batch if c["canonical"] not in recent_history),
+                unique_batch[0],
+            )
+
+            # Wrap all non-served candidates as buffer entries so we can reuse
+            # them on subsequent requests. Exclude the one we serve.
+            leftover = [c for c in unique_batch if c is not serve_candidate]
+            stored_count = 0
+            for cand in leftover:
+                if len(mode_bucket) >= MAX_BUFFER_PER_MODE:
+                    break
+                mode_bucket.append(make_buffer_entry(
+                    candidate=cand,
+                    mode_key=mode_key,
+                    generation_mode=generation_mode,
+                    expert_mode=expert_mode,
+                    include_mirror=include_mirror,
+                    include_part_permuted=include_part_permuted,
+                    perspective_mode=perspective_mode,
+                    question_index=question_index,
+                ))
+                stored_count += 1
+            print(f"[target-buffer] Stored {stored_count}/{len(leftover)} leftover candidate(s); "
+                  f"bucket size {len(mode_bucket)}/{MAX_BUFFER_PER_MODE}")
+
+            chosen_entry = make_buffer_entry(
+                candidate=serve_candidate,
+                mode_key=mode_key,
+                generation_mode=generation_mode,
+                expert_mode=expert_mode,
+                include_mirror=include_mirror,
+                include_part_permuted=include_part_permuted,
+                perspective_mode=perspective_mode,
+                question_index=question_index,
+            )
+
+        # ------------------------------------------------------------------
+        # Materialize locals expected by the downstream distractor pipeline
+        # from the selected entry. We rebuild a live spec/base_target_sfs via
+        # get_difficulty_spec() using the entry's stored difficulties so that
+        # distractor generation behaves exactly as before.
+        # ------------------------------------------------------------------
+        shape_difficulties = chosen_entry["shape_difficulties"]
+        task_difficulties = chosen_entry["task_difficulties"]
+        stored_voxel_count = (chosen_entry.get("features") or {}).get("voxel_count") or 10
         spec = get_difficulty_spec(
             shape_difficulties, task_difficulties,
-            target_voxel_count=target_question_voxel_count
+            target_voxel_count=int(stored_voxel_count),
         )
         use_mirror = spec.task_params.include_mirror
         use_part_permuted = spec.task_params.include_part_permuted
-        print(f"Shape difficulties: {shape_difficulties}")
-        print(f"Task params: mirror={use_mirror}, part_permuted={use_part_permuted}, perspective={perspective_mode}, wm={spec.task_params.wm_mode}")
-
         base_target_sfs = spec.shape_features
-        # Ensure target shape is always a single component
         base_target_sfs.number_of_components = 1
-        print(f"Target SFS: {base_target_sfs.model_dump(exclude_none=True)}")
 
-        # 3. Generate the target shape using the skeleton-first method
-        skeleton_spec = get_skeleton_spec(shape_difficulties, task_difficulties, target_question_voxel_count)
-        target_shape_data = generate_shape_skeleton(skeleton_spec)
-        print(f"Skeleton spec: archetype={skeleton_spec.archetype}, branches={skeleton_spec.num_branches}, "
-              f"loops={skeleton_spec.num_loops}, spread={skeleton_spec.direction_spread}, "
-              f"packing={skeleton_spec.packing}, planarity={skeleton_spec.planarity}")
+        # Prefer the skeleton_spec that was actually used when the candidate
+        # was generated (preserves archetype/branches for distractor perturbation).
+        skeleton_spec = chosen_entry.get("skeleton_spec")
+        if skeleton_spec is None and generation_mode == "skeleton":
+            skeleton_spec = get_skeleton_spec(
+                shape_difficulties, task_difficulties, int(stored_voxel_count)
+            )
 
-        # Serving-layer orphan cleanup. When the spec requested a single
-        # connected component but the skeleton fallback leaked a multi-
-        # component result (main shape + stray voxel), keep only the largest
-        # connected piece. Specs that legitimately request multi-component
-        # shapes are passed through untouched.
-        if getattr(skeleton_spec, "num_components", 1) == 1:
-            _grid_t = tuple(target_shape_data["grid_size"])
-            _largest = keep_largest_component(target_shape_data["voxels"], _grid_t)
-            if len(_largest) != len(target_shape_data["voxels"]):
-                print(f"Target had multiple components; kept largest "
-                      f"({len(_largest)}/{len(target_shape_data['voxels'])} voxels)")
-                target_shape_data["voxels"] = [list(v) for v in _largest]
-                target_shape_data["features"] = analyze_shape_features(
-                    _largest, _grid_t
-                ).model_dump(exclude_none=True)
-
-        # The 'features' field includes original targets + calculated actuals
+        # Rehydrate the shape_data dict expected downstream.
+        target_shape_data = {
+            "voxels": [list(v) for v in chosen_entry["voxels"]],
+            "grid_size": list(chosen_entry["grid_size"]),
+            "features": copy.deepcopy(chosen_entry.get("features") or {}),
+        }
         target_features_dict = target_shape_data["features"]
 
-        # Create the target ShapeResponse instance
         target_shape_response = ShapeResponse(
-            id=f"target_{uuid.uuid4().hex[:6]}",
+            id=chosen_entry["id"],
             voxels=target_shape_data["voxels"],
             grid_size=list(target_shape_data["grid_size"]),
-            features=target_features_dict
+            features=target_features_dict,
         )
-        print(f"Target shape generated. Actual voxels: {target_features_dict.get('voxel_count', 0)}")
+        cognitive_profile_data = copy.deepcopy(chosen_entry["cognitive_profile_data"])
+
+        print(f"Shape difficulties: {shape_difficulties}")
+        print(f"Task params: mirror={use_mirror}, part_permuted={use_part_permuted}, "
+              f"perspective={perspective_mode}, wm={spec.task_params.wm_mode}")
+        print(f"Target SFS: {base_target_sfs.model_dump(exclude_none=True)}")
+        if skeleton_spec is not None:
+            print(f"Skeleton spec: archetype={skeleton_spec.archetype}, branches={skeleton_spec.num_branches}, "
+                  f"loops={skeleton_spec.num_loops}, spread={skeleton_spec.direction_spread}, "
+                  f"packing={skeleton_spec.packing}, planarity={skeleton_spec.planarity}")
+        print(f"Target shape ready. Actual voxels: {target_features_dict.get('voxel_count', 0)}")
         print(f"  Actual compactness: {target_features_dict.get('compactness_score', 0.0):.2f}")
         print(f"  Actual branching: {target_features_dict.get('branching_factor', 0)}")
         print(f"  Actual components: {target_features_dict.get('number_of_components', 0)}")
         print(f"  Actual planarity: {target_features_dict.get('planarity_score', 0.0):.2f}")
-        
-        # DEBUG: Check if voxels are properly generated
         print(f"DEBUG: Target voxels count: {len(target_shape_data['voxels'])}")
-        if len(target_shape_data['voxels']) == 0:
-            print("WARNING: Empty voxels array for target!")
-            # Generate a simple default shape as fallback
-            target_shape_data['voxels'] = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
-            target_shape_response.voxels = target_shape_data['voxels']
-        
-        # Reverse-map: verify what the generated shape actually embodies
-        valid_keys = ShapeFeatureSet.model_fields.keys()
-        target_sfs = ShapeFeatureSet(**{k: v for k, v in target_features_dict.items() if k in valid_keys and v is not None})
-        verified_profile = reverse_map_cognitive_profile(target_sfs, shape_difficulties)
-        cognitive_profile_data = {
-            "intended": {
-                "shape_difficulties": shape_difficulties,
-                "task_difficulties": task_difficulties,
-                "recommended_archetype": spec.recommended_archetype,
-            },
-            "verified": cognitive_profile_to_dict(verified_profile),
-        }
-        print(f"  Cognitive fidelity: {verified_profile.overall_fidelity:.2f}")
 
-        # Store canonical representation of target shape's voxels for uniqueness checks
-        canonical_target_voxels = canonical_voxel_form(target_shape_response.voxels)
+        # Update recent-history and trim.
+        canonical_target_voxels = chosen_entry["canonical"]
+        recent_history.append(canonical_target_voxels)
+        if len(recent_history) > MAX_RECENT_TARGETS:
+            overflow = len(recent_history) - MAX_RECENT_TARGETS
+            del recent_history[:overflow]
+            print(f"[target-buffer] Trimmed recent history by {overflow} "
+                  f"(now {len(recent_history)}/{MAX_RECENT_TARGETS})")
+
         accepted_canonical_voxels_for_question = {canonical_target_voxels}
 
         distractors = []
@@ -481,20 +946,25 @@ def get_multiple_choice(
             tier_names = {0: "RADICAL", 1: "MODERATE", 2: "SUBTLE"}
             print(f"--- Generating Distractor {len(distractors)+1} (Tier {tier}: {tier_names.get(tier, '?')}) ---")
             generated_distractor_shape_data = None
-            unique_distractor = False
 
+            unique_distractor = False
             for attempt in range(MAX_DISTRACTOR_GENERATION_ATTEMPTS):
                 print(f"  Attempt {attempt+1}/{MAX_DISTRACTOR_GENERATION_ATTEMPTS}, Tier {tier}")
 
-                distractor_spec = perturb_skeleton_spec(skeleton_spec, tier)
-                # Escalate after repeated failures: swap to a different archetype so
-                # highly-constrained targets (e.g., a bridge "figure-8") don't keep
-                # producing rotational copies.
-                if attempt >= 3:
-                    alt_archetypes = [a for a in ("tree", "chiral", "bridge")
-                                      if a != skeleton_spec.archetype]
-                    distractor_spec.archetype = random.choice(alt_archetypes)
-                generated_distractor_shape_data = generate_shape_skeleton(distractor_spec)
+                if generation_mode == "skeleton":
+                    distractor_spec = perturb_skeleton_spec(skeleton_spec, tier)
+                    # Escalate after repeated failures: swap to a different
+                    # archetype so highly-constrained targets (e.g., a bridge
+                    # "figure-8") don't keep producing rotational copies.
+                    if attempt >= 3:
+                        alt_archetypes = [a for a in ("tree", "chiral", "bridge")
+                                          if a != skeleton_spec.archetype]
+                        distractor_spec.archetype = random.choice(alt_archetypes)
+                    generated_distractor_shape_data = generate_shape_skeleton(distractor_spec)
+                else:
+                    current_distractor_sfs = perturb_features(base_target_sfs, tier)
+                    generated_distractor_shape_data = generate_shape_advanced(
+                        current_distractor_sfs, max_iterations=75 * current_distractor_sfs.voxel_count)
 
                 if len(generated_distractor_shape_data['voxels']) == 0:
                     print(f"  WARNING: Empty voxels, using fallback")
@@ -659,7 +1129,7 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
     print(f"Shape ID: {data.shape_id}, Target ID: {data.target_id}")
     print(f"Correct: {data.correct}, Response Time: {data.response_time}")
     print(f"Target features included: {data.target_features is not None}")
-    
+
     if data.target_features:
         features_count = len(data.target_features) if isinstance(data.target_features, dict) else "Not a dict"
         print(f"Features received count: {features_count}")
@@ -680,19 +1150,31 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
     # Get database session
     db = next(get_db())
 
-    # Get or create user stats record
-    user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == current_user.id).first()
-    if not user_stats:
-        print(f"Creating new GameStats record for user {current_user.id}")
-        user_stats = models.GameStats(
-            user_id=current_user.id,
+    # Guest users (id is None) must not query or write the shared NULL-keyed
+    # GameStats row.  Use a transient in-memory stub instead so the rest of
+    # the function can run without special-casing every DB access.
+    import types as _types
+    _persist_to_db = current_user.id is not None
+
+    if _persist_to_db:
+        user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == current_user.id).first()
+        if not user_stats:
+            print(f"Creating new GameStats record for user {current_user.id}")
+            user_stats = models.GameStats(
+                user_id=current_user.id,
+                total_questions=0,
+                correct_answers=0,
+                feature_stats={}
+            )
+            db.add(user_stats)
+    else:
+        user_stats = _types.SimpleNamespace(
             total_questions=0,
             correct_answers=0,
-            feature_stats={}
+            feature_stats={},
         )
-        db.add(user_stats)
 
-    # Update database stats
+    # Update database stats (or in-memory stub for guests).
     user_stats.total_questions += 1
     if is_correct:
         user_stats.correct_answers += 1
@@ -812,7 +1294,8 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
                 # Only accept numeric or boolean values from the client.  String
                 # values could carry HTML/script payloads and are not produced by
                 # the server's own feature-measurement code for ShapeFeatureSet
-                # fields.
+                # fields.  (Interaction-derived string values such as
+                # angular_disparity_bucket are added later by server-side code.)
                 if not isinstance(value, (int, float, bool)):
                     print(f"Rejecting non-numeric value for feature {field!r}: {type(value)}")
                     continue
@@ -1030,26 +1513,30 @@ def submit_response(data: ResponseSubmission, current_user: models.User = Depend
             user_stats.feature_stats = "{}"
             print("RESET: Feature stats reset to empty JSON object")
 
-    # Commit changes to the database
-    try:
-        db.commit()
-        print(f"Successfully saved game stats to database. User ID: {current_user.id}, Total questions: {user_stats.total_questions}")
-        print(f"Feature stats data size: {len(user_stats.feature_stats) if user_stats.feature_stats else 0} characters")
-        
-        # Verify stored data can be parsed
+    # Commit changes to the database (guests use an in-memory stub, no DB write).
+    if _persist_to_db:
         try:
-            if isinstance(user_stats.feature_stats, str):
-                test_parse = json.loads(user_stats.feature_stats)
-                print(f"Verification: Stored JSON can be parsed into {len(test_parse)} features")
+            db.commit()
+            print(f"Successfully saved game stats to database. User ID: {current_user.id}, Total questions: {user_stats.total_questions}")
+            print(f"Feature stats data size: {len(user_stats.feature_stats) if user_stats.feature_stats else 0} characters")
+
+            # Verify stored data can be parsed
+            try:
+                if isinstance(user_stats.feature_stats, str):
+                    test_parse = json.loads(user_stats.feature_stats)
+                    print(f"Verification: Stored JSON can be parsed into {len(test_parse)} features")
+            except Exception as e:
+                print(f"WARNING: Stored JSON verification failed: {str(e)}")
         except Exception as e:
-            print(f"WARNING: Stored JSON verification failed: {str(e)}")
-    except Exception as e:
-        db.rollback()
-        print(f"Error saving to database: {str(e)}")
-        import traceback
-        traceback.print_exc()
-    finally:
+            db.rollback()
+            print(f"Error saving to database: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            db.close()
+    else:
         db.close()
+        print(f"Guest user — session stats stored in memory only (not persisted).")
 
     return {
         "status": "recorded",
@@ -1073,7 +1560,8 @@ def _compute_scorecard(current_user) -> dict:
     """Compute scorecard data for a user. Reusable by both /scorecard and coaching endpoints."""
     user_id = current_user.id
     user_state = get_user_runtime_state(get_session_key(current_user))
-    # Process session data
+
+    # Process per-user session data
     session_full_stats = {}
     session_feature_stats = user_state.get("feature_stats", {})
 
@@ -1099,11 +1587,22 @@ def _compute_scorecard(current_user) -> dict:
     # Get database session
     db = next(get_db())
 
-    # Get user stats from database
-    user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == user_id).first()
+    # Guest users (user_id is None) must not touch the shared NULL-keyed row.
+    # Return a transient empty stats object so the rest of the function works
+    # without DB access.
+    if user_id is None:
+        import types as _types
+        user_stats = _types.SimpleNamespace(
+            total_questions=0,
+            correct_answers=0,
+            feature_stats={},
+        )
+    else:
+        # Get user stats from database
+        user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == user_id).first()
 
-    # Create default stats if none exist
-    if not user_stats:
+    # Create default stats if none exist (authenticated users only)
+    if user_id is not None and not user_stats:
         user_stats = models.GameStats(
             user_id=user_id,
             total_questions=0,
@@ -1147,7 +1646,7 @@ def _compute_scorecard(current_user) -> dict:
                     "avg_response_time": avg_time
                 }
 
-    # Calculate overall performance metrics
+    # Calculate overall performance metrics (from per-user session state)
     session_total = user_state["total_questions"]
     session_correct = user_state["correct_answers"]
 
@@ -1162,7 +1661,7 @@ def _compute_scorecard(current_user) -> dict:
     STRONG_THRESHOLD = 80
     MIN_ATTEMPTS_FOR_VERDICT = 3
 
-    def _split_strong_weak(full_stats: dict):
+    def _split_strong_weak(full_stats: dict) -> tuple[list, list]:
         weak, strong = [], []
         for feature, values in full_stats.items():
             for value, stats in values.items():
@@ -1522,6 +2021,10 @@ def coaching_scorecard_analysis(
 
 @app.post("/reset-session")
 def reset_session(current_user: models.User = Depends(auth.get_current_active_user)):
+    # Remove this user's entire in-memory state entry so it is re-initialized
+    # fresh the next time they submit a response or request stats.  This clears
+    # both the session stats (total_questions, feature_stats, etc.) and the
+    # target-buffering state (recent_target_canonicals, target_buffer).
     session_data.get("per_user", {}).pop(get_session_key(current_user), None)
     return {"message": "Session reset successfully"}
 
@@ -1530,15 +2033,16 @@ def reset_all_data(current_user: models.User = Depends(auth.get_current_active_u
     # Clear this user's in-memory session state.
     session_data.get("per_user", {}).pop(get_session_key(current_user), None)
 
-    # Reset database data
+    # Reset database data for authenticated users only; guests have no DB row.
     db = next(get_db())
-    user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == current_user.id).first()
+    if current_user.id is not None:
+        user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == current_user.id).first()
 
-    if user_stats:
-        user_stats.total_questions = 0
-        user_stats.correct_answers = 0
-        user_stats.feature_stats = {}
-        db.commit()
+        if user_stats:
+            user_stats.total_questions = 0
+            user_stats.correct_answers = 0
+            user_stats.feature_stats = {}
+            db.commit()
 
     db.close()
 
@@ -1564,9 +2068,13 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
     print(f"\n=== Attempting Feature Data Repair ===")
     print(f"User: {current_user.username} (ID: {current_user.id})")
 
+    # Guest users have no persistent DB record to repair.
+    if current_user.id is None:
+        return {"message": "Feature data repair is not available for guest sessions."}
+
     # Get database session
     db = next(get_db())
-    
+
     try:
         # 1. Get current user stats record from database
         user_stats = db.query(models.GameStats).filter(models.GameStats.user_id == current_user.id).first()
@@ -1715,11 +2223,3 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
         db.close()
     
     return result
-
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-if __name__ == "__main__":
-    import uvicorn
-    # Re-enable reload for development convenience
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)

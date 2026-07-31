@@ -1,7 +1,7 @@
 """
 Skeleton-First Cognitive Shape Generation Engine for MindFold 3D.
 
-Copyright (c) 2024-2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
+Copyright (c) 2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
 Patent pending. See docs/PATENT_SPECIFICATION.md for claims.
 
 This module implements the Skeleton-First Shape Generation System, a core
@@ -28,7 +28,7 @@ from shape_generation import (
     analyze_shape_features,
     _get_neighbors,
     _count_components,
-    _calculate_cycle_count,
+    _calculate_circuit_rank,
     _calculate_compactness_score,
     _calculate_planarity_score,
     _calculate_branching_factor,
@@ -112,12 +112,12 @@ class SkeletonRule:
             valid = list(candidates)
 
             # Cap cycles at intended level
-            current_cycles = _calculate_cycle_count(self.voxels, self.grid_size)
+            current_cycles = _calculate_circuit_rank(self.voxels, self.grid_size)
             if current_cycles >= max_cycles:
                 filtered = []
                 for c in valid:
                     temp = self.voxels | {c}
-                    if _calculate_cycle_count(temp, self.grid_size) <= current_cycles:
+                    if _calculate_circuit_rank(temp, self.grid_size) <= current_cycles:
                         filtered.append(c)
                 if filtered:
                     valid = filtered
@@ -803,7 +803,7 @@ class LoopSkeleton(SkeletonRule):
             if len(self.voxels) >= target:
                 break
 
-            current_cycles = _calculate_cycle_count(self.voxels, self.grid_size)
+            current_cycles = _calculate_circuit_rank(self.voxels, self.grid_size)
 
             candidates = set()
             for v in self.voxels:
@@ -818,14 +818,14 @@ class LoopSkeleton(SkeletonRule):
             valid = []
             for c in candidates:
                 temp = self.voxels | {c}
-                new_cycles = _calculate_cycle_count(temp, self.grid_size)
+                new_cycles = _calculate_circuit_rank(temp, self.grid_size)
                 if new_cycles >= target_loops and new_cycles <= max_cycles:
                     valid.append(c)
 
             if not valid:
                 # Relax: accept any candidate that doesn't decrease below target
                 valid = [c for c in candidates
-                         if _calculate_cycle_count(self.voxels | {c}, self.grid_size) >= target_loops]
+                         if _calculate_circuit_rank(self.voxels | {c}, self.grid_size) >= target_loops]
             if not valid:
                 valid = list(candidates)
 
@@ -858,7 +858,395 @@ class LoopSkeleton(SkeletonRule):
         target_loops = max(1, spec.num_loops)
         if _count_components(self.voxels, self.grid_size) != 1:
             return False
-        return _calculate_cycle_count(self.voxels, self.grid_size) >= target_loops
+        return _calculate_circuit_rank(self.voxels, self.grid_size) >= target_loops
+
+
+# =============================================================================
+# Hole-Tier Generation (topological β₁ targeting)
+#
+# The graph-cyclic tiers (Low/Medium/High/Expert) target circuit rank μ, a
+# graph invariant. The hole tiers (Hole-1 through Hole-4) target cubical β₁,
+# a topological invariant of holes in the shape's volume. HoleMarkedLoopSkeleton
+# builds shapes around a rigid ring/chain template with a reserved-hole set
+# marking the topological holes to preserve. Fill runs freely (barred from
+# reserved-hole cells), an accidental-cavity closure pass fills any enclosed
+# empty regions outside the reserved-hole set (so emitted voxel count can
+# exceed the target by the cavity volume), and a per-shape cubical-β₁
+# validation certifies β₁ = target before emission. Validation exhaustion
+# raises HoleTierGenerationError rather than emitting an uncertified shape.
+#
+# The post-generation geometric optimizer preserves μ but not β₁ (see
+# generate_shape_skeleton). Hole-tier specs must set spec.skip_optimizer = True.
+# =============================================================================
+
+_Voxel = Tuple[int, int, int]
+
+
+class HoleTierGenerationError(RuntimeError):
+    """Raised when hole-tier generation exhausts its attempt budget without
+    producing a shape that passes cubical-β₁ validation. Emitting an
+    uncertified shape would break the hole-tier guarantee, so this is an
+    error rather than a silent fallback."""
+
+
+def _build_rectangle_perimeter(
+    center: _Voxel,
+    plane_axes: Tuple[int, int],
+    size_a: int,
+    size_b: int,
+) -> Set[_Voxel]:
+    """Rectangular perimeter of (size_a × size_b) in `plane_axes`, centered."""
+    ax1, ax2 = plane_axes
+    voxels: Set[_Voxel] = set()
+    for i in range(size_a):
+        for j in (0, size_b - 1):
+            v = list(center)
+            v[ax1] = center[ax1] - size_a // 2 + i
+            v[ax2] = center[ax2] - size_b // 2 + j
+            voxels.add(tuple(v))
+    for j in range(1, size_b - 1):
+        for i in (0, size_a - 1):
+            v = list(center)
+            v[ax1] = center[ax1] - size_a // 2 + i
+            v[ax2] = center[ax2] - size_b // 2 + j
+            voxels.add(tuple(v))
+    return voxels
+
+
+def _build_rectangle_interior_hole(
+    center: _Voxel,
+    plane_axes: Tuple[int, int],
+    size_a: int,
+    size_b: int,
+    grid_size: Tuple[int, int, int],
+    protect_full_column: bool = True,
+) -> Set[_Voxel]:
+    """Reserved-hole set for a rectangle perimeter.
+
+    Interior voxels of the ring, optionally extended through the full
+    perpendicular column so the topological tube cannot be capped from
+    above or below during fill.
+    """
+    ax1, ax2 = plane_axes
+    ax3 = 3 - ax1 - ax2
+    hole: Set[_Voxel] = set()
+    for i in range(1, size_a - 1):
+        for j in range(1, size_b - 1):
+            v = list(center)
+            v[ax1] = center[ax1] - size_a // 2 + i
+            v[ax2] = center[ax2] - size_b // 2 + j
+            hole.add(tuple(v))
+    if protect_full_column:
+        seeds = list(hole)
+        for seed in seeds:
+            for k in range(grid_size[ax3]):
+                v = list(seed)
+                v[ax3] = k
+                hole.add(tuple(v))
+    return hole
+
+
+def _choose_random_plane(rng: random.Random) -> Tuple[int, int]:
+    """Pick a random axis-aligned plane: (0,1)=xy, (0,2)=xz, (1,2)=yz."""
+    return rng.choice([(0, 1), (0, 2), (1, 2)])
+
+
+def _choose_ring_size(
+    grid_size: Tuple[int, int, int],
+    plane_axes: Tuple[int, int],
+    rng: random.Random,
+    min_size: int = 3,
+) -> Tuple[int, int]:
+    """Choose a rectangle (size_a, size_b) that fits with a 1-voxel margin."""
+    ax1, ax2 = plane_axes
+    max_a = max(min_size, grid_size[ax1] - 2)
+    max_b = max(min_size, grid_size[ax2] - 2)
+    return rng.randint(min_size, max_a), rng.randint(min_size, max_b)
+
+
+def _choose_ring_center(
+    grid_size: Tuple[int, int, int],
+    plane_axes: Tuple[int, int],
+    size_a: int,
+    size_b: int,
+    rng: random.Random,
+) -> _Voxel:
+    """Choose a center that keeps a (size_a × size_b) ring inside the grid."""
+    ax1, ax2 = plane_axes
+    ax3 = 3 - ax1 - ax2
+    c1_lo = size_a // 2
+    c1_hi = grid_size[ax1] - 1 - size_a // 2
+    c2_lo = size_b // 2
+    c2_hi = grid_size[ax2] - 1 - size_b // 2
+    center = [0, 0, 0]
+    center[ax1] = rng.randint(c1_lo, max(c1_lo, c1_hi))
+    center[ax2] = rng.randint(c2_lo, max(c2_lo, c2_hi))
+    center[ax3] = rng.randint(0, grid_size[ax3] - 1)
+    return tuple(center)
+
+
+class HoleMarkedLoopSkeleton(SkeletonRule):
+    """Skeleton generator for topological (hole) tiers.
+
+    Targets cubical β₁ rather than graph circuit rank μ. Uses a rigid ring or
+    ring-chain template with a reserved-hole set to enforce the topological
+    lower bound β₁ ≥ num_loops by construction. An accidental-cavity closure
+    pass fills enclosed empty regions outside the reserved-hole set (this
+    controls β₂ and can raise the emitted voxel count above target); the
+    upper bound β₁ ≤ num_loops is enforced by per-shape cubical-β₁
+    validation with regeneration, since fill can create accidental handles
+    that closure cannot detect.
+
+    Reserved-hole voxels are inviolable during fill, discarded on emit. See
+    the paper's "Hole-Tier Generation" subsection for the six-step procedure
+    and correctness argument.
+
+    IMPORTANT: because the post-generation geometric optimizer preserves μ but
+    not β₁, a spec that uses this class must set spec.skip_optimizer = True.
+    """
+
+    def __init__(self, grid_size: Tuple[int, int, int], rng: 'random.Random | None' = None):
+        super().__init__(grid_size)
+        self.hole_voxels: Set[_Voxel] = set()
+        self.rng = rng if rng is not None else random.Random()
+
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
+
+    def generate(self, spec: SkeletonSpec) -> Set[_Voxel]:
+        self.voxels.clear()
+        self.hole_voxels.clear()
+
+        target_loops = max(0, spec.num_loops)
+
+        if target_loops == 0:
+            # β₁ = 0 shapes are trees; fall back to TreeSkeleton
+            tree = TreeSkeleton(self.grid_size)
+            tree._build(spec)
+            self.voxels = tree.voxels
+            return self.voxels
+
+        if target_loops == 1:
+            self._build_single_ring(spec)
+        elif target_loops == 2:
+            self._build_double_ring(spec)
+        elif target_loops == 3:
+            self._build_ring_chain(spec, num_rings=3)
+        else:
+            self._build_ring_chain(spec, num_rings=min(target_loops, 6))
+
+        self._fill_hole_aware(spec)
+        self._close_accidental_holes()
+        return self.voxels
+
+    # ------------------------------------------------------------------
+    # Template constructors
+    # ------------------------------------------------------------------
+
+    def _build_single_ring(self, spec: SkeletonSpec) -> None:
+        plane = _choose_random_plane(self.rng)
+        min_s = 3
+        size_a, size_b = _choose_ring_size(self.grid_size, plane, self.rng, min_size=min_s)
+        if spec.packing == "dense":
+            size_a = min(size_a, min_s + 1)
+            size_b = min(size_b, min_s + 1)
+        # Respect the voxel budget: shrink the sampled ring until its perimeter
+        # 2(a+b)-4 fits within target_voxels (floor 3x3 = 8 voxels). Without
+        # this cap, small-target specs emit template-sized shapes far above
+        # target (e.g. a 9x9 ring = 32 voxels against an 8-voxel target).
+        while 2 * (size_a + size_b) - 4 > spec.voxel_count and (size_a > min_s or size_b > min_s):
+            if size_a >= size_b and size_a > min_s:
+                size_a -= 1
+            elif size_b > min_s:
+                size_b -= 1
+        center = _choose_ring_center(self.grid_size, plane, size_a, size_b, self.rng)
+        skeleton = _build_rectangle_perimeter(center, plane, size_a, size_b)
+        hole = _build_rectangle_interior_hole(center, plane, size_a, size_b, self.grid_size)
+        for v in skeleton:
+            if self.in_bounds(v):
+                self.add_voxel(v)
+        self.hole_voxels.update(v for v in hole if self.in_bounds(v))
+
+    def _build_double_ring(self, spec: SkeletonSpec) -> None:
+        plane = _choose_random_plane(self.rng)
+        ax1, ax2 = plane
+        ax3 = 3 - ax1 - ax2
+        min_s = 3
+        max_s = min(4, self.grid_size[ax1] // 2 - 1, self.grid_size[ax2] - 2)
+        max_s = max(min_s, max_s)
+        size = self.rng.randint(min_s, max_s)
+        # Budget cap: a double ring of side s uses 2(4s-4) - s = 7s - 8
+        # skeleton voxels; shrink s so the template fits the target count.
+        while size > min_s and 7 * size - 8 > spec.voxel_count:
+            size -= 1
+        c1_lo = size
+        c1_hi = self.grid_size[ax1] - 1 - size
+        c2_lo = size // 2
+        c2_hi = self.grid_size[ax2] - 1 - size // 2
+        c1 = self.rng.randint(c1_lo, max(c1_lo, c1_hi))
+        c2 = self.rng.randint(c2_lo, max(c2_lo, c2_hi))
+        c3 = self.rng.randint(0, self.grid_size[ax3] - 1)
+        offset = size - 1
+        for shift in (-offset // 2, (offset + 1) // 2):
+            center = [0, 0, 0]
+            center[ax1] = c1 + shift
+            center[ax2] = c2
+            center[ax3] = c3
+            skel = _build_rectangle_perimeter(tuple(center), plane, size, size)
+            hole = _build_rectangle_interior_hole(
+                tuple(center), plane, size, size, self.grid_size
+            )
+            for v in skel:
+                if self.in_bounds(v):
+                    self.add_voxel(v)
+            self.hole_voxels.update(v for v in hole if self.in_bounds(v))
+
+    def _build_ring_chain(self, spec: SkeletonSpec, num_rings: int) -> None:
+        plane = _choose_random_plane(self.rng)
+        ax1, ax2 = plane
+        ax3 = 3 - ax1 - ax2
+        min_s = 3
+        margin = 2
+        avail = self.grid_size[ax1] - margin
+        max_s_for_chain = (avail - 1) // num_rings + 1
+        max_s_grid = self.grid_size[ax2] - margin
+        max_s = min(max_s_for_chain, max_s_grid, 4)
+        if max_s < min_s:
+            max_s = min_s
+            num_rings = max(1, (self.grid_size[ax1] - margin - 1) // (min_s - 1))
+        size = self.rng.randint(min_s, max(min_s, max_s))
+        # Budget cap: a k-ring chain of side s uses k(4s-4) - (k-1)s skeleton
+        # voxels; shrink s so the template fits the target count.
+        while size > min_s and num_rings * (4 * size - 4) - (num_rings - 1) * size > spec.voxel_count:
+            size -= 1
+        step = size - 1
+        chain_len = num_rings * step + 1
+        start_ax1 = self.rng.randint(1, max(1, self.grid_size[ax1] - chain_len))
+        c2 = self.rng.randint(size // 2, self.grid_size[ax2] - 1 - size // 2)
+        c3 = self.rng.randint(0, self.grid_size[ax3] - 1)
+        for i in range(num_rings):
+            center = [0, 0, 0]
+            center[ax1] = start_ax1 + size // 2 + i * step
+            center[ax2] = c2
+            center[ax3] = c3
+            if center[ax1] + size // 2 >= self.grid_size[ax1]:
+                break
+            skel = _build_rectangle_perimeter(tuple(center), plane, size, size)
+            hole = _build_rectangle_interior_hole(
+                tuple(center), plane, size, size, self.grid_size
+            )
+            for v in skel:
+                if self.in_bounds(v):
+                    self.add_voxel(v)
+            self.hole_voxels.update(v for v in hole if self.in_bounds(v))
+
+    # ------------------------------------------------------------------
+    # Fill and cavity closure
+    # ------------------------------------------------------------------
+
+    def _fill_hole_aware(self, spec: SkeletonSpec) -> None:
+        """Grow shape voxels adjacent to S, forbidden from reserved-hole cells.
+
+        Fill is junction-biased: while the shape's branching factor is below
+        the spec's num_branches target, candidates whose addition creates a
+        new junction (a voxel reaching 3+ face-adjacent neighbors) are
+        preferred. This lets cyclic tiers hit their branching-factor ranges,
+        which uniform-random fill systematically undershoots.
+        """
+        target = spec.voxel_count
+        branch_target = max(0, spec.num_branches)
+        max_iters = max(50, (target - len(self.voxels)) * 8)
+        for _ in range(max_iters):
+            if len(self.voxels) >= target:
+                break
+            candidates: Set[_Voxel] = set()
+            for v in self.voxels:
+                for n in _get_neighbors(v, self.grid_size, include_diagonal=False):
+                    if (
+                        n not in self.voxels
+                        and n not in self.hole_voxels
+                        and self.in_bounds(n)
+                    ):
+                        candidates.add(n)
+            if not candidates:
+                break
+
+            # Precision branching control: score each candidate by the exact
+            # branching factor of the resulting shape and keep only the
+            # candidates whose result lands closest to the target. Shapes at
+            # these sizes are small enough that per-candidate recomputation
+            # is cheap. Random choice among the best keeps shape diversity.
+            cand_sorted = sorted(candidates)
+            scored = []
+            for c in cand_sorted:
+                trial = self.voxels | {c}
+                bf_after = _calculate_branching_factor(trial, self.grid_size)
+                scored.append((abs(bf_after - branch_target), c))
+            best_dist = min(d for d, _ in scored)
+            best = [c for d, c in scored if d == best_dist]
+            choice = self.rng.choice(best)
+            self.add_voxel(choice)
+
+    def _close_accidental_holes(self) -> None:
+        """Fill enclosed empty voxels that are NOT in the reserved-hole set.
+
+        BFS from every grid-boundary non-shape cell treats both empty and
+        reserved-hole cells as passable. Any non-shape voxel unreachable from
+        the boundary is enclosed; if it is not part of the reserved-hole set
+        it is an accidental cavity and gets filled with a shape voxel. The
+        reserved-hole set (the intended topology) is left untouched.
+        """
+        from collections import deque
+        gs = self.grid_size
+        visited: Set[_Voxel] = set()
+        queue: deque = deque()
+        for x in range(gs[0]):
+            for y in range(gs[1]):
+                for z in range(gs[2]):
+                    on_boundary = (
+                        x == 0 or x == gs[0] - 1
+                        or y == 0 or y == gs[1] - 1
+                        or z == 0 or z == gs[2] - 1
+                    )
+                    if not on_boundary:
+                        continue
+                    v = (x, y, z)
+                    if v in self.voxels or v in visited:
+                        continue
+                    visited.add(v)
+                    queue.append(v)
+        while queue:
+            v = queue.popleft()
+            for n in _get_neighbors(v, gs, include_diagonal=False):
+                if n in visited or n in self.voxels:
+                    continue
+                visited.add(n)
+                queue.append(n)
+        accidental: Set[_Voxel] = set()
+        for x in range(gs[0]):
+            for y in range(gs[1]):
+                for z in range(gs[2]):
+                    v = (x, y, z)
+                    if v in self.voxels or v in visited:
+                        continue
+                    if v not in self.hole_voxels:
+                        accidental.add(v)
+        for v in accidental:
+            self.add_voxel(v)
+
+    # ------------------------------------------------------------------
+    # Validation (cubical β₁)
+    # ------------------------------------------------------------------
+
+    def _validate(self, spec: SkeletonSpec) -> bool:
+        target = spec.target_b1 if spec.target_b1 is not None else max(0, spec.num_loops)
+        if _count_components(self.voxels, self.grid_size) != 1:
+            return False
+        # Lazy import: topology_extras depends on shape_generation which
+        # depends on this module transitively; keep the import local.
+        from topology_extras import cubical_betti_1
+        return cubical_betti_1(self.voxels) == target
 
 
 def _compute_symmetry_score_for_gate(vs: Set[Tuple[int, int, int]]) -> float:
@@ -886,12 +1274,21 @@ def _optimize_geometry(
     shape_difficulties: Dict[str, str],
     preserve_chirality: bool = False,
     max_iterations: int = 300,
+    preserve_b1: 'Optional[int]' = None,
 ) -> Set[Tuple[int, int, int]]:
     """Post-generation geometric optimizer: local search to hit cognitive targets.
 
-    Preserves topological structure (connectivity, cycle count, branching factor)
-    while adjusting geometric features (compactness, planarity, form index,
-    anisotropy) toward their cognitive-difficulty target ranges.
+    Preserves topological structure (connectivity, circuit rank, branching
+    factor) while adjusting geometric features (compactness, planarity, form
+    index, anisotropy) toward their cognitive-difficulty target ranges.
+
+    When preserve_b1 is set, every accepted swap must also leave the cubical
+    first Betti number at exactly that value. Circuit-rank preservation alone
+    does NOT protect β₁: a swap can plug a reserved-hole tunnel or open an
+    edge-adjacency tunnel while leaving μ unchanged. All-Betti tiers
+    (hole-generated cyclic shapes: preserve_b1 = k; acyclic tree/chiral
+    shapes: preserve_b1 = 0) pass their validated β₁ here so Spatial Form
+    steering cannot silently change topology.
 
     Uses greedy swap search: each iteration removes a non-articulation voxel and
     adds a new adjacent voxel, accepting swaps that reduce the distance-to-target
@@ -901,6 +1298,7 @@ def _optimize_geometry(
     that reverse-map back to the original cognitive params.
     """
     from cognitive_mapping import SHAPE_DIMENSIONS
+    from topology_extras import cubical_betti_1 as _cubical_b1
 
     # Build target ranges for geometric features only
     GEO_FEATURES = {
@@ -928,7 +1326,7 @@ def _optimize_geometry(
     # cycle_tol is always 0 (exact cycle count preserved); branch_tol is 999
     # (effectively unbounded) for low spatial_form to allow compact reshaping,
     # and 0 (exact branch count preserved) otherwise.
-    topo_cycles = _calculate_cycle_count(voxels, grid_size)
+    topo_cycles = _calculate_circuit_rank(voxels, grid_size)
     topo_branching = _calculate_branching_factor(voxels, grid_size)
     topo_components = _count_components(voxels, grid_size)
     # Strict topology preservation: no tolerance on cycles or branching,
@@ -938,7 +1336,17 @@ def _optimize_geometry(
     # cluster while preserving connectivity and cycle count.
     cycle_tol = 0
     sf_level = shape_difficulties.get("spatial_form", "medium")
-    branch_tol = 999 if sf_level == "low" else 0
+    # Relaxed branching for low AND medium spatial form: with the all-Betti
+    # baseline (structural complexity held at low → 2-branch chains), strict
+    # branch preservation pins shapes in an elongated configuration and the
+    # optimizer cannot reach low/medium anisotropy targets. The relaxation is
+    # bounded by the structural-complexity tier's branching CEILING, so
+    # reshaping freedom cannot push branching into a higher SC tier (which
+    # would corrupt SC classification). β₁ is separately pinned by _b1_ok.
+    branch_tol = 999 if sf_level in ("low", "medium") else 0
+    _sc_level = shape_difficulties.get("structural_complexity", "medium")
+    _bf_range = SHAPE_DIMENSIONS["structural_complexity"]["features"]["branching_factor"].get(_sc_level, (0, 8))
+    branch_ceiling = _bf_range[1] if isinstance(_bf_range, tuple) else _bf_range
 
     # Group targets by dimension so we can weight dimensions equally.
     # This prevents spatial_form (3 features) from dominating spatial_density
@@ -1042,9 +1450,13 @@ def _optimize_geometry(
         """Check that topological invariants are preserved."""
         if _count_components(vs, grid_size) != topo_components:
             return False
-        if abs(_calculate_cycle_count(vs, grid_size) - topo_cycles) > cycle_tol:
+        if abs(_calculate_circuit_rank(vs, grid_size) - topo_cycles) > cycle_tol:
             return False
-        if abs(_calculate_branching_factor(vs, grid_size) - topo_branching) > branch_tol:
+        bf = _calculate_branching_factor(vs, grid_size)
+        if branch_tol >= 999:
+            if bf > branch_ceiling:
+                return False
+        elif abs(bf - topo_branching) > branch_tol:
             return False
         if preserve_chirality:
             vl = [list(v) for v in vs]
@@ -1086,15 +1498,26 @@ def _optimize_geometry(
         """Check topology preservation."""
         if _count_components(trial, grid_size) != topo_components:
             return False
-        if abs(_calculate_cycle_count(trial, grid_size) - topo_cycles) > cycle_tol:
+        if abs(_calculate_circuit_rank(trial, grid_size) - topo_cycles) > cycle_tol:
             return False
-        if abs(_calculate_branching_factor(trial, grid_size) - topo_branching) > branch_tol:
+        bf = _calculate_branching_factor(trial, grid_size)
+        if branch_tol >= 999:
+            if bf > branch_ceiling:
+                return False
+        elif abs(bf - topo_branching) > branch_tol:
             return False
         if preserve_chirality:
             vl = [list(v) for v in trial]
             if generate_mirror_reflection(vl, grid_size) is None:
                 return False
         return True
+
+    def _b1_ok(trial):
+        """Lazy cubical-β₁ invariant check — called only on swaps that are
+        about to be ACCEPTED, never inside the per-candidate scoring loop
+        (cubical homology per trial would be ~100× the cost of the cheap
+        graph filters)."""
+        return preserve_b1 is None or _cubical_b1(trial) == preserve_b1
 
     # --- Phase 1: General geometric optimizer ---
     stale_count = 0
@@ -1142,7 +1565,10 @@ def _optimize_geometry(
                     best_feats = tf
 
             if best_add is not None:
-                current = after_rm | {best_add}
+                committed = after_rm | {best_add}
+                if not _b1_ok(committed):
+                    continue  # best swap would change β₁; try next removal voxel
+                current = committed
                 cur_score = best_sc
                 cur_feats = best_feats
                 improved = True
@@ -1190,9 +1616,11 @@ def _optimize_geometry(
                     tf = compute_geo(trial)
                     ts = geo_score(tf)
                     # Accept only if: compactness improved AND overall score
-                    # didn't get worse (protects spatial_form gains).
+                    # didn't get worse (protects spatial_form gains) AND the
+                    # β₁ invariant holds (lazy check, acceptance-time only).
                     if (tf["compactness_score"] > cur_feats["compactness_score"]
-                            and ts <= cur_score + 1e-6):
+                            and ts <= cur_score + 1e-6
+                            and _b1_ok(trial)):
                         current = trial
                         cur_feats = tf
                         cur_score = ts
@@ -1337,23 +1765,94 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
         "tree": TreeSkeleton,
         "chiral": AsymmetricSkeleton,
         "bridge": LoopSkeleton,
+        "hole": HoleMarkedLoopSkeleton,
     }
     cls = skeleton_classes.get(archetype, TreeSkeleton)
 
+    # Hole-tier shapes target cubical β₁ rather than graph circuit rank μ.
+    # The optimizer may run on them, but only in β₁-preserving mode (every
+    # accepted swap re-verified against the validated β₁). Explicit
+    # skip_optimizer on the spec is still honored (e.g. dedicated hole-tier
+    # stimuli that need no Spatial Form steering).
+    is_hole_tier = (archetype == "hole") or (spec.target_b1 is not None)
+    skip_optimizer = spec.skip_optimizer
+    if is_hole_tier:
+        b1_preserve = spec.target_b1 if spec.target_b1 is not None else max(0, spec.num_loops)
+    elif spec.num_loops == 0 and archetype in ("tree", "chiral"):
+        # Acyclic all-Betti tiers: validated to β₁ = 0 above; the optimizer
+        # must not open an edge-adjacency tunnel (μ-preservation alone
+        # cannot prevent that).
+        b1_preserve = 0
+    else:
+        b1_preserve = None  # legacy paths (direct LoopSkeleton use, etc.)
+
     # Multi-component shapes are assembled from isolated blobs, not single skeleton runs
+    attempts_used = 0
     if spec.num_components > 1:
         best_voxels = _build_multi_component(spec)
     else:
         best_voxels = None
-        for attempt in range(max_attempts):
-            skeleton = cls(grid_size)
+        validated = False
+        # Hole tiers get more attempts because validation is strict (β₁ exact match).
+        attempts_budget = 20 if is_hole_tier else max_attempts
+        for attempt in range(attempts_budget):
+            attempts_used = attempt + 1
+            if is_hole_tier:
+                # Reseed the RNG per attempt so validation failures explore a
+                # different template placement / fill trajectory next time.
+                skeleton = cls(grid_size, rng=random.Random())
+            else:
+                skeleton = cls(grid_size)
             skeleton.generate(spec)
 
-            if skeleton._validate(spec):
+            structurally_valid = skeleton._validate(spec)
+
+            # All-Betti design: acyclic tiers (tree/chiral, num_loops == 0)
+            # must actually be acyclic in the topological sense. Generated
+            # shapes occasionally acquire an edge-adjacency tunnel invisible
+            # to the face-adjacency graph (β₁ = 1 with μ = 0, ~5-7% of
+            # shapes at 15 voxels), so β₁ = 0 is validated with regeneration
+            # like every other β₁ target.
+            if structurally_valid and not is_hole_tier and spec.num_loops == 0:
+                from topology_extras import cubical_betti_1
+                if cubical_betti_1(skeleton.voxels) != 0:
+                    structurally_valid = False
+
+            # Chirality gate: mirror-discrimination trials need a chiral
+            # target (an achiral shape's mirror distractor is just a rotated
+            # copy, making the trial unanswerable). AsymmetricSkeleton
+            # guarantees chirality by construction, but the hole archetype
+            # overrides chiral when a cyclic tier is requested, and ring
+            # shapes are frequently achiral — so when mirror discrimination
+            # is high/expert, chirality is validated with regeneration like
+            # every other guaranteed property.
+            if structurally_valid and spec.task_difficulties.get(
+                "mirror_discrimination"
+            ) in ("high", "expert"):
+                vl = [list(v) for v in skeleton.voxels]
+                if generate_mirror_reflection(vl, grid_size) is None:
+                    structurally_valid = False
+
+            if structurally_valid:
                 best_voxels = skeleton.voxels
+                validated = True
                 break
             if best_voxels is None:
                 best_voxels = skeleton.voxels
+
+        # Hole tiers carry a per-shape certification guarantee (cubical
+        # β₁ = target on every emitted shape). Emitting an uncertified shape
+        # would silently break that guarantee, so exhaustion is an error.
+        # Graph-cyclic tiers keep best-effort emission: their _validate is a
+        # soft structural check and downstream classification uses measured
+        # features regardless.
+        if is_hole_tier and not validated:
+            raise HoleTierGenerationError(
+                f"Hole-tier generation failed validation on all "
+                f"{attempts_budget} attempts (target_b1="
+                f"{spec.target_b1 if spec.target_b1 is not None else spec.num_loops}, "
+                f"voxel_count={spec.voxel_count}, grid={grid_size})."
+            )
 
     voxels_set = best_voxels if best_voxels else set()
 
@@ -1361,22 +1860,66 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
     # and other geometric features toward target ranges for the spatial_form difficulty.
     # Topology preserved with zero tolerance for cycles and components; branching
     # tolerance is relaxed (branch_tol=999) for low SF to allow compact reshaping.
-    voxels_set = _optimize_geometry(
-        voxels_set,
-        grid_size,
-        spec.shape_difficulties,
-        preserve_chirality=(archetype == "chiral"),
-    )
+    # For all-Betti tiers, preserve_b1 pins the cubical β₁ at its validated
+    # value through every accepted swap.
+    if not skip_optimizer:
+        voxels_set = _optimize_geometry(
+            voxels_set,
+            grid_size,
+            spec.shape_difficulties,
+            preserve_chirality=(archetype == "chiral"),
+            preserve_b1=b1_preserve,
+        )
 
     # Post-optimization symmetry gate for expert spatial_form.
     # The optimizer can often get symmetry to 0 (odd-span shapes) but sometimes
     # stalls at 0.18 (even-span self-mirrors).  Retry if symmetry > target.
+    # Skipped for hole tiers: the gate regenerates without re-running β₁
+    # validation, which would break the emitted-set certification.
     sf_level = spec.shape_difficulties.get("spatial_form", "medium")
-    if sf_level == "expert" and spec.num_components == 1:
-        sym_target_hi = 0.15
-        for _sym_attempt in range(12):
-            sym_val = _compute_symmetry_score_for_gate(voxels_set)
-            if sym_val <= sym_target_hi:
+    if not skip_optimizer and not is_hole_tier and spec.num_components == 1:
+        # Generalized Spatial Form gate (extends the earlier expert-only
+        # symmetry gate): if the optimized shape's anisotropy or symmetry
+        # landed outside the intended SF tier's ranges, regenerate and
+        # re-optimize with fresh seeds, keeping the candidate with the
+        # smallest out-of-range deviation. The greedy optimizer stalls just
+        # outside the target range in a minority of runs (boundary drift);
+        # this retry converts a per-attempt hit rate of p into ~1-(1-p)^K.
+        from cognitive_mapping import SHAPE_DIMENSIONS as _SD
+        from shape_generation import (
+            _calculate_anisotropy_index as _ai_of_eigs,
+            _get_pca_eigenvalues as _pca_eigs,
+            _calculate_symmetry_score as _sym_of,
+        )
+
+        def _sf_range(feat_name):
+            r = _SD["spatial_form"]["features"][feat_name].get(sf_level)
+            if r is None:
+                return None
+            return r if isinstance(r, tuple) else (float(r), float(r))
+
+        _ai_rng = _sf_range("anisotropy_index")
+        _sym_rng = _sf_range("symmetry_score")
+
+        def _sf_deviation(vs):
+            dev = 0.0
+            if _ai_rng is not None:
+                ai = _ai_of_eigs(_pca_eigs(vs))
+                if ai < _ai_rng[0]:
+                    dev += _ai_rng[0] - ai
+                elif ai > _ai_rng[1]:
+                    dev += ai - _ai_rng[1]
+            if _sym_rng is not None:
+                sym = _sym_of(vs)
+                if sym < _sym_rng[0]:
+                    dev += _sym_rng[0] - sym
+                elif sym > _sym_rng[1]:
+                    dev += sym - _sym_rng[1]
+            return dev
+
+        best_dev = _sf_deviation(voxels_set)
+        for _sf_attempt in range(10):
+            if best_dev <= 1e-9:
                 break
             # Regenerate and re-optimize with a different seed
             skeleton2 = cls(grid_size)
@@ -1387,9 +1930,18 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
                 grid_size,
                 spec.shape_difficulties,
                 preserve_chirality=(archetype == "chiral"),
+                preserve_b1=b1_preserve,
             )
-            if _compute_symmetry_score_for_gate(cand) < sym_val:
+            if b1_preserve is not None:
+                # Regenerated candidates bypass the validation loop above, so
+                # re-check the β₁ invariant before accepting.
+                from topology_extras import cubical_betti_1
+                if cubical_betti_1(cand) != b1_preserve:
+                    continue
+            cand_dev = _sf_deviation(cand)
+            if cand_dev < best_dev:
                 voxels_set = cand
+                best_dev = cand_dev
 
     analyzed_sfs = analyze_shape_features(voxels_set, grid_size)
 
@@ -1399,4 +1951,5 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
         "features": analyzed_sfs.to_dict(),
         "generation_mode": "skeleton",
         "archetype": archetype,
+        "attempts": attempts_used,
     }

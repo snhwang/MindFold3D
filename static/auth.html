@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>MindFold 3D</title>
+  <title>MindFold 3D – Login</title>
   <!--OG_META-->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
@@ -11,49 +11,192 @@
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: #f5f7fa;
       color: #333;
+      padding: 0;
     }
     header {
       text-align: center;
       padding: 20px 0;
       background: white;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    header img { max-height: 120px; width: auto; }
+    header img {
+      max-height: 120px;
+      width: auto;
+    }
     .container {
-      max-width: 500px;
-      margin: 40px auto;
-      padding: 30px;
+      max-width: 400px;
+      margin: 30px auto;
+      padding: 20px;
       background: white;
       border-radius: 8px;
-      box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
-      text-align: center;
+      box-shadow: 0 2px 15px rgba(0,0,0,0.1);
     }
-    h1 { margin-top: 0; font-size: 26px; color: #333; }
-    p.intro { color: #555; line-height: 1.5; margin-bottom: 25px; }
-    button.start-btn {
+    h1 {
+      text-align: center;
+      margin-top: 0;
+      color: #333;
+      font-size: 24px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
       background: #007acc;
       color: white;
       border: none;
       border-radius: 4px;
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 600;
-      padding: 16px 32px;
       cursor: pointer;
+      margin-top: 10px;
     }
-    button.start-btn:hover { background: #0069b0; }
-    button.start-btn:disabled { background: #888; cursor: not-allowed; }
+    button:hover {
+      background: #0069b0;
+    }
+    .guest-btn {
+      background: #6c757d;
+      margin-top: 15px;
+    }
+    .guest-btn:hover {
+      background: #565e64;
+    }
+    .guest-primary-btn {
+      background: #007acc;
+      font-size: 18px;
+      padding: 14px;
+      margin-top: 0;
+    }
+    .guest-primary-btn:hover {
+      background: #0069b0;
+    }
+    .guest-note {
+      color: #666;
+      font-size: 13px;
+      text-align: center;
+      margin: 8px 0 0 0;
+    }
+    .section-heading {
+      text-align: center;
+      margin: 0 0 10px 0;
+      color: #333;
+      font-size: 18px;
+    }
+    .divider-section {
+      display: flex;
+      align-items: center;
+      margin: 20px 0;
+      color: #666;
+      font-size: 13px;
+      gap: 10px;
+    }
+    .divider-section::before,
+    .divider-section::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #ddd;
+    }
+    .forgot-link-wrap {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .forgot-link-wrap a {
+      color: #007acc;
+      text-decoration: none;
+    }
+    .forgot-link-wrap a:hover {
+      text-decoration: underline;
+    }
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.active {
+      display: flex;
+    }
+    .modal-panel {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .modal-panel h2 {
+      margin: 0 0 10px 0;
+      font-size: 20px;
+    }
+    .modal-close {
+      background: #ccc;
+      color: #333;
+      margin-top: 8px;
+    }
+    .modal-close:hover { background: #bbb; }
+    .divider {
+      text-align: center;
+      margin: 15px 0 5px;
+      color: #999;
+      font-size: 14px;
+    }
     .error {
       color: #e53935;
-      margin-top: 15px;
+      margin-top: 10px;
       padding: 10px;
       background-color: rgba(229, 57, 53, 0.08);
       border-radius: 4px;
       display: none;
     }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #ddd;
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      background: #f5f5f5;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: #007acc;
+      color: white;
+      font-weight: 600;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    /* 3D structure container */
     #structure-container {
       width: 100%;
-      height: 220px;
-      margin: 20px auto 0;
+      height: 200px;
+      margin: 30px auto 0;
       position: relative;
     }
     .site-footer {
@@ -63,7 +206,10 @@
       padding: 16px 20px 24px;
       line-height: 1.5;
     }
-    .site-footer a { color: #007acc; text-decoration: none; }
+    .site-footer a {
+      color: #007acc;
+      text-decoration: none;
+    }
     .site-footer a:hover { text-decoration: underline; }
 
     @media (max-width: 480px) {
@@ -72,7 +218,9 @@
       header img { max-height: 72px; }
       .container { margin: 16px auto; padding: 16px; }
       h1 { font-size: 20px; }
+      .section-heading { font-size: 16px; }
       button { font-size: 15px; padding: 11px; }
+      .guest-primary-btn { font-size: 16px; padding: 12px; }
     }
 
     /* ── Portrait-only on phones ──
@@ -110,8 +258,8 @@
       50% { transform: rotate(0deg); }
     }
     @media (max-width: 900px) and (orientation: landscape) {
-      #portrait-lock-overlay { display: flex; }
-      body > *:not(#portrait-lock-overlay) { visibility: hidden; }
+      #portrait-lock-overlay { display: flex !important; }
+      body > *:not(#portrait-lock-overlay) { visibility: hidden !important; }
     }
   </style>
 </head>
@@ -132,83 +280,329 @@
   </header>
 
   <div class="container">
-    <h1>Spatial cognition, trained in 3D.</h1>
-    <p class="intro">MindFold 3D generates novel voxel shapes with controlled cognitive properties. Identify matches, rebuild structures, and measure your mental rotation, mirror discrimination, and structural reasoning across trials.</p>
-    <button class="start-btn" id="start-btn">Start Game</button>
-    <div id="start-error" class="error"></div>
+    <!-- Primary: Guest mode -->
+    <h1 class="section-heading">Start playing now</h1>
+    <button class="guest-primary-btn" id="guest-login-btn">Continue as Guest</button>
+    <p class="guest-note">No signup required. Jump straight into the game.</p>
+
+    <div class="divider-section">or create an account to save your progress</div>
+
+    <!-- Optional: Login / Register -->
+    <div class="tabs">
+      <div class="tab active" id="login-tab-btn">Login</div>
+      <div class="tab" id="register-tab-btn">Register (Optional)</div>
+    </div>
+
+    <div id="login-form-container" class="tab-content active">
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocapitalize="none">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit">Login</button>
+        <div id="login-error" class="error"></div>
+      </form>
+      <div class="forgot-link-wrap">
+        <a href="#" id="forgot-password-link">Forgot password?</a>
+      </div>
+    </div>
+
+    <div id="register-form-container" class="tab-content">
+      <form id="register-form">
+        <div class="form-group">
+          <label for="reg-username">Username</label>
+          <input type="text" id="reg-username" name="username" required autocapitalize="none">
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password</label>
+          <input type="password" id="reg-password" name="password" required minlength="8">
+        </div>
+        <button type="submit">Register</button>
+        <div id="register-error" class="error"></div>
+        <div id="register-success" style="color: green; margin-top: 10px; display: none;"></div>
+      </form>
+    </div>
   </div>
 
+  <!-- Forgot password modal -->
+  <div class="modal-backdrop" id="forgot-modal">
+    <div class="modal-panel">
+      <h2>Reset your password</h2>
+      <p style="margin: 0 0 12px 0; color: #555; font-size: 14px;">Enter the email address you registered with. If there's an account, we'll send a reset link.</p>
+      <form id="forgot-form">
+        <div class="form-group">
+          <label for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" required>
+        </div>
+        <button type="submit">Send reset link</button>
+        <button type="button" class="modal-close" id="forgot-cancel-btn">Cancel</button>
+        <div id="forgot-error" class="error"></div>
+        <div id="forgot-success" style="color: green; margin-top: 10px; display: none;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3D structure container -->
   <div id="structure-container"></div>
 
   <footer class="site-footer">
-    &copy; 2024-2026 The Pennsylvania State University &middot; Patent Pending &middot;
+    &copy; 2026 The Pennsylvania State University &middot; Patent Pending &middot;
     <a href="/license" target="_blank" rel="noopener">License (OCVSAL v1.0)</a> &middot;
     Licensing inquiries: <a href="mailto:ottinfo@psu.edu">ottinfo@psu.edu</a>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
   <script>
-    if (localStorage.getItem('token')) {
-      // Send authenticated users to the mode-picker landing page
-      // instead of dropping them straight into multiple choice.
-      window.location.href = '/home';
-    }
+    // Tab switching logic
+    document.getElementById('login-tab-btn').addEventListener('click', function() {
+      document.getElementById('login-tab-btn').classList.add('active');
+      document.getElementById('register-tab-btn').classList.remove('active');
+      document.getElementById('login-form-container').classList.add('active');
+      document.getElementById('register-form-container').classList.remove('active');
+    });
 
-    document.getElementById('start-btn').addEventListener('click', function () {
-      const btn = this;
-      const errorEl = document.getElementById('start-error');
+    document.getElementById('register-tab-btn').addEventListener('click', function() {
+      document.getElementById('register-tab-btn').classList.add('active');
+      document.getElementById('login-tab-btn').classList.remove('active');
+      document.getElementById('register-form-container').classList.add('active');
+      document.getElementById('login-form-container').classList.remove('active');
+    });
+
+    // Restore original auth logic
+    document.addEventListener('DOMContentLoaded', function() {
+      // If token exists, send the user to the home/mode-picker page
+      // (formerly went straight to '/' which is the multiple-choice game).
+      if (localStorage.getItem('token')) {
+        window.location.href = '/home';
+      }
+    });
+
+    // Forgot password modal
+    const forgotModal = document.getElementById('forgot-modal');
+    document.getElementById('forgot-password-link').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('forgot-error').style.display = 'none';
+      document.getElementById('forgot-success').style.display = 'none';
+      document.getElementById('forgot-form').reset();
+      forgotModal.classList.add('active');
+    });
+    document.getElementById('forgot-cancel-btn').addEventListener('click', function() {
+      forgotModal.classList.remove('active');
+    });
+    document.getElementById('forgot-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const email = document.getElementById('forgot-email').value;
+      const errorEl = document.getElementById('forgot-error');
+      const successEl = document.getElementById('forgot-success');
+      const submitBtn = this.querySelector('button[type="submit"]');
       errorEl.style.display = 'none';
+      successEl.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Sending...';
+      fetch('/request-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      .then(response => response.json())
+      .then(data => {
+        successEl.textContent = data.message || 'If the email exists, a reset link has been sent.';
+        successEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Send reset link';
+      })
+      .catch(error => {
+        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Send reset link';
+      });
+    });
+
+    // Guest login
+    document.getElementById('guest-login-btn').addEventListener('click', function() {
+      const btn = this;
       btn.disabled = true;
-      btn.innerText = 'Starting...';
-      fetch('/start-session', { method: 'POST' })
-        .then(r => {
-          if (!r.ok) throw new Error('Failed to start session');
-          return r.json();
-        })
+      btn.innerText = 'Entering as guest...';
+      fetch('/guest-login', { method: 'POST' })
+        .then(response => response.json())
         .then(data => {
           localStorage.setItem('token', data.access_token);
           window.location.href = '/home';
         })
-        .catch(() => {
-          errorEl.textContent = 'Could not start a session. Please try again.';
+        .catch(error => {
+          const errorEl = document.getElementById('login-error');
+          errorEl.textContent = 'Guest login failed. Please try again.';
           errorEl.style.display = 'block';
           btn.disabled = false;
-          btn.innerText = 'Start Game';
+          btn.innerText = 'Continue as Guest';
         });
     });
 
-    (function () {
-      let scene, camera, renderer, shapeGroup;
+    // Login form submission
+    document.getElementById('login-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.style.display = 'none';
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('password', password);
+      const submitBtn = this.querySelector('button');
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Logging in...';
+      fetch('/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData
+      })
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            localStorage.setItem('token', data.access_token);
+            window.location.href = '/home';
+          });
+        } else {
+          return response.json().then(data => {
+            errorEl.textContent = data.detail || 'Login failed';
+            errorEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'Login';
+          });
+        }
+      })
+      .catch(error => {
+        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Login';
+      });
+    });
 
+    // Register form submission
+    document.getElementById('register-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      console.log('Register form submitted');
+      
+      const username = document.getElementById('reg-username').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('reg-password').value;
+      const errorEl = document.getElementById('register-error');
+      const successEl = document.getElementById('register-success');
+      
+      errorEl.style.display = 'none';
+      successEl.style.display = 'none';
+      
+      // Show submitting state
+      const submitBtn = this.querySelector('button');
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Registering...';
+      
+      fetch('/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password
+        })
+      })
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            console.log('Registration successful');
+            successEl.textContent = 'Registration successful! You can now log in.';
+            successEl.style.display = 'block';
+            document.getElementById('register-form').reset();
+            
+            // Switch to login tab after 2 seconds
+            setTimeout(() => {
+              document.getElementById('login-tab-btn').click();
+            }, 2000);
+            
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'Register';
+          });
+        } else {
+          return response.json().then(data => {
+            console.log('Registration failed:', data);
+            errorEl.textContent = data.detail || 'Registration failed';
+            errorEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'Register';
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Registration error:', error);
+        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Register';
+      });
+    });
+
+    // 3D rotating structure
+    (function() {
+      let scene, camera, renderer;
+      let currentShape;
+      let shapeGroup;
+      
+      // Initialize Three.js scene
       function init() {
+        // Create scene
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf5f7fa);
-
+        
+        // Create camera
         const container = document.getElementById('structure-container');
         const aspect = container.clientWidth / container.clientHeight;
-        // Wider view distance so 8-14 voxel clusters always fit the short
-        // landing-page container.
+        // Wider FOV + further distance so clusters of 8-14 voxels always fit
+        // comfortably inside the short landing-page container.
         camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
         camera.position.set(8, 8, 8);
         camera.lookAt(0, 0, 0);
-
+        
+        // Create renderer
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         container.appendChild(renderer.domElement);
-
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        
+        // Add lighting
+        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambient);
+        
         const light = new THREE.DirectionalLight(0xffffff, 0.8);
         light.position.set(10, 10, 10);
         scene.add(light);
-
+        
+        // Create group for shapes
         shapeGroup = new THREE.Group();
         scene.add(shapeGroup);
-
+        
+        // Create initial shape
         createRandomShape();
+
+        // Set shape change interval (every 6 seconds)
         setInterval(createRandomShape, 6000);
+        
+        // Handle window resize
         window.addEventListener('resize', onWindowResize);
       }
-
+      
       function onWindowResize() {
         const container = document.getElementById('structure-container');
         const aspect = container.clientWidth / container.clientHeight;
@@ -216,13 +610,26 @@
         camera.updateProjectionMatrix();
         renderer.setSize(container.clientWidth, container.clientHeight);
       }
-
-      // Weighted picker - no solid-cube variant so every shape is a real
-      // multi-voxel structure. Random voxel cluster is most representative
-      // of the actual game, so it gets the highest weight.
+      
+      // Create a random shape. The demo deliberately favours multi-voxel
+      // structures over trivial primitives so visitors always see something
+      // representative of the actual game. (The earlier version picked a
+      // single solid cube 20% of the time, which read as 'one voxel'.)
       function createRandomShape() {
-        while (shapeGroup.children.length > 0) shapeGroup.remove(shapeGroup.children[0]);
-        const material = new THREE.MeshStandardMaterial({ color: 0x007acc, roughness: 0.4, metalness: 0.1 });
+        // Clear previous shape
+        while (shapeGroup.children.length > 0) {
+          shapeGroup.remove(shapeGroup.children[0]);
+        }
+
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x007acc,
+          roughness: 0.4,
+          metalness: 0.1
+        });
+
+        // Weighted picker: the random-voxel-cluster variant is visually
+        // richest, so it gets extra weight. No single-cube primitive - every
+        // shape is an assembly of multiple 1x1x1 voxels.
         const variants = [
           { fn: createLShape,          weight: 1 },
           { fn: createTShape,          weight: 1 },
@@ -231,67 +638,138 @@
         ];
         const total = variants.reduce((s, v) => s + v.weight, 0);
         let r = Math.random() * total;
-        for (const v of variants) { if ((r -= v.weight) <= 0) { v.fn(material); return; } }
+        for (const v of variants) {
+          if ((r -= v.weight) <= 0) { v.fn(material); return; }
+        }
         variants[variants.length - 1].fn(material);
       }
-      function createLShape(m) {
-        const g = new THREE.BoxGeometry(1, 1, 1);
-        for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(i - 1, 0, 0); shapeGroup.add(c); }
-        for (let i = 1; i < 3; i++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(-1, i, 0); shapeGroup.add(c); }
+      
+      // Create an L shape
+      function createLShape(material) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        
+        // Base of L
+        for (let i = 0; i < 3; i++) {
+          const cube = new THREE.Mesh(geometry, material.clone());
+          cube.position.set(i - 1, 0, 0);
+          shapeGroup.add(cube);
+        }
+        
+        // Vertical part of L
+        for (let i = 1; i < 3; i++) {
+          const cube = new THREE.Mesh(geometry, material.clone());
+          cube.position.set(-1, i, 0);
+          shapeGroup.add(cube);
+        }
       }
-      function createTShape(m) {
-        const g = new THREE.BoxGeometry(1, 1, 1);
-        for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(i - 1, 1, 0); shapeGroup.add(c); }
-        for (let i = 0; i < 2; i++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(0, i, 0); shapeGroup.add(c); }
+      
+      // Create a T shape
+      function createTShape(material) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        
+        // Horizontal bar of T
+        for (let i = 0; i < 3; i++) {
+          const cube = new THREE.Mesh(geometry, material.clone());
+          cube.position.set(i - 1, 1, 0);
+          shapeGroup.add(cube);
+        }
+        
+        // Vertical part of T
+        for (let i = 0; i < 2; i++) {
+          const cube = new THREE.Mesh(geometry, material.clone());
+          cube.position.set(0, i, 0);
+          shapeGroup.add(cube);
+        }
       }
-      function createPyramidShape(m) {
-        const g = new THREE.BoxGeometry(1, 1, 1);
-        for (let x = 0; x < 3; x++) for (let z = 0; z < 3; z++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(x - 1, 0, z - 1); shapeGroup.add(c); }
-        for (let x = 0; x < 2; x++) for (let z = 0; z < 2; z++) { const c = new THREE.Mesh(g, m.clone()); c.position.set(x - 0.5, 1, z - 0.5); shapeGroup.add(c); }
-        const top = new THREE.Mesh(g, m.clone()); top.position.set(0, 2, 0); shapeGroup.add(top);
+      
+      // Create a pyramid
+      function createPyramidShape(material) {
+        // Base layer (3x3)
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        for (let x = 0; x < 3; x++) {
+          for (let z = 0; z < 3; z++) {
+            const cube = new THREE.Mesh(geometry, material.clone());
+            cube.position.set(x - 1, 0, z - 1);
+            shapeGroup.add(cube);
+          }
+        }
+        
+        // Middle layer (2x2)
+        for (let x = 0; x < 2; x++) {
+          for (let z = 0; z < 2; z++) {
+            const cube = new THREE.Mesh(geometry, material.clone());
+            cube.position.set(x - 0.5, 1, z - 0.5);
+            shapeGroup.add(cube);
+          }
+        }
+        
+        // Top cube
+        const topCube = new THREE.Mesh(geometry, material.clone());
+        topCube.position.set(0, 2, 0);
+        shapeGroup.add(topCube);
       }
-      // Face-adjacent voxel cluster, 8-14 voxels. Retries any base/direction
-      // combination until the target count is hit (no per-voxel early bailout)
-      // so the shape never degenerates to 1-2 voxels.
-      function createRandomStructure(m) {
-        const g = new THREE.BoxGeometry(1, 1, 1);
-        const n = 8 + Math.floor(Math.random() * 7);
+      
+      // Create a random voxel cluster by face-adjacent growth. Targets
+      // 8-14 voxels and keeps trying different base/direction combinations
+      // until it hits the target count (or runs out of total attempts), so
+      // the shape is always substantial - never degenerates to 1-2 voxels.
+      function createRandomStructure(material) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const numCubes = 8 + Math.floor(Math.random() * 7); // 8-14
+
         const positions = [{ x: 0, y: 0, z: 0 }];
-        const used = new Set(['0,0,0']);
+        const key = (p) => `${p.x},${p.y},${p.z}`;
+        const used = new Set([key(positions[0])]);
+
         const dirs = [
           { x:  1, y:  0, z:  0 }, { x: -1, y:  0, z:  0 },
           { x:  0, y:  1, z:  0 }, { x:  0, y: -1, z:  0 },
           { x:  0, y:  0, z:  1 }, { x:  0, y:  0, z: -1 }
         ];
-        let tries = 0;
-        while (positions.length < n && tries++ < n * 40) {
-          const b = positions[Math.floor(Math.random() * positions.length)];
+
+        let totalAttempts = 0;
+        const maxTotal = numCubes * 40;
+        while (positions.length < numCubes && totalAttempts < maxTotal) {
+          totalAttempts++;
+          const base = positions[Math.floor(Math.random() * positions.length)];
           const d = dirs[Math.floor(Math.random() * dirs.length)];
-          const np = { x: b.x + d.x, y: b.y + d.y, z: b.z + d.z };
-          const k = `${np.x},${np.y},${np.z}`;
-          if (!used.has(k)) { used.add(k); positions.push(np); }
+          const newPos = { x: base.x + d.x, y: base.y + d.y, z: base.z + d.z };
+          const k = key(newPos);
+          if (!used.has(k)) {
+            used.add(k);
+            positions.push(newPos);
+          }
         }
+
+        // Build meshes
         for (const p of positions) {
-          const c = new THREE.Mesh(g, m.clone());
-          c.position.set(p.x, p.y, p.z);
-          shapeGroup.add(c);
+          const cube = new THREE.Mesh(geometry, material.clone());
+          cube.position.set(p.x, p.y, p.z);
+          shapeGroup.add(cube);
         }
+
+        // Center on centroid
         const center = new THREE.Vector3();
         positions.forEach(p => { center.x += p.x; center.y += p.y; center.z += p.z; });
         center.divideScalar(positions.length);
         shapeGroup.position.set(-center.x, -center.y, -center.z);
       }
-
+      
+      // Animation loop
       function animate() {
         requestAnimationFrame(animate);
+        
+        // Rotate the shape
         shapeGroup.rotation.y += 0.01;
         shapeGroup.rotation.x += 0.005;
+        
         renderer.render(scene, camera);
       }
-
+      
+      // Initialize and start animation
       init();
       animate();
     })();
   </script>
 </body>
-</html>
+</html> 

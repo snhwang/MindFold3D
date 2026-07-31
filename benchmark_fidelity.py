@@ -1,7 +1,7 @@
 """
 Generation Fidelity Benchmarking Tool — MindFold 3D
 
-Copyright (c) 2024-2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
+Copyright (c) 2026 Scott N. Hwang, Parviz Safadel. All rights reserved.
 
 Systematically generates shapes across all difficulty combinations, measures
 their actual geometric features, and reports fidelity statistics: what fraction
@@ -54,9 +54,18 @@ ALL_DIMS = list(SHAPE_DIMENSIONS.keys())
 # ---------------------------------------------------------------------------
 
 def _generate_and_measure(dim_name: str, level: str, n: int) -> List[Dict]:
-    """Generate n shapes targeting (dim_name=level), measure all features."""
+    """Generate n shapes targeting (dim_name=level), measure all features.
+
+    Held-dimension baseline: medium, EXCEPT structural_complexity, which is
+    held at LOW when it is not the varied dimension. Under the all-Betti
+    design, medium SC means one guaranteed volumetric hole, and ring-bearing
+    shapes geometrically constrain Spatial Form (rings are compact and
+    symmetric), making SF targets unreachable. The neutral level for a
+    topological feature is its absence (β₁ = 0).
+    """
     results = []
     shape_difficulties = {d: "medium" for d in ALL_DIMS}
+    shape_difficulties["structural_complexity"] = "low"
     shape_difficulties[dim_name] = level
 
     for _ in range(n):

@@ -1,0 +1,426 @@
+{
+  "metadata": {
+    "date": "2026-07-30T16:18:39.995323",
+    "n_per_cell": 200,
+    "dimensions": [
+      "spatial_form",
+      "structural_complexity",
+      "spatial_scale"
+    ],
+    "levels": [
+      "low",
+      "medium",
+      "high",
+      "expert"
+    ],
+    "total_shapes": 2400,
+    "total_time_seconds": 1267.5
+  },
+  "results": {
+    "spatial_form": {
+      "low": {
+        "intended_level": "low",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "low": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "anisotropy_index": {
+            "mean": 0.3464,
+            "std": 0.0175,
+            "min": 0.3225,
+            "max": 0.3696,
+            "n": 200
+          },
+          "symmetry_score": {
+            "mean": 0.8791,
+            "std": 0.0677,
+            "min": 0.7273,
+            "max": 0.9091,
+            "n": 200
+          }
+        }
+      },
+      "medium": {
+        "intended_level": "medium",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "medium": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "anisotropy_index": {
+            "mean": 0.5927,
+            "std": 0.0429,
+            "min": 0.456,
+            "max": 0.6464,
+            "n": 200
+          },
+          "symmetry_score": {
+            "mean": 0.6032,
+            "std": 0.0439,
+            "min": 0.5455,
+            "max": 0.6364,
+            "n": 200
+          }
+        }
+      },
+      "high": {
+        "intended_level": "high",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 0.995,
+          "n": 200,
+          "distribution": {
+            "high": 0.995,
+            "mixed": 0.005
+          },
+          "ci_95": [
+            0.9722,
+            0.9991
+          ],
+          "n_correct": 199
+        },
+        "features": {
+          "anisotropy_index": {
+            "mean": 0.7816,
+            "std": 0.0329,
+            "min": 0.6547,
+            "max": 0.8199,
+            "n": 200
+          },
+          "symmetry_score": {
+            "mean": 0.4055,
+            "std": 0.0481,
+            "min": 0.1818,
+            "max": 0.4545,
+            "n": 200
+          }
+        }
+      },
+      "expert": {
+        "intended_level": "expert",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 0.99,
+          "n": 200,
+          "distribution": {
+            "expert": 0.99,
+            "mixed": 0.01
+          },
+          "ci_95": [
+            0.9643,
+            0.9973
+          ],
+          "n_correct": 198
+        },
+        "features": {
+          "anisotropy_index": {
+            "mean": 0.9808,
+            "std": 0.0111,
+            "min": 0.9273,
+            "max": 0.99,
+            "n": 200
+          },
+          "symmetry_score": {
+            "mean": 0.1827,
+            "std": 0.0091,
+            "min": 0.1818,
+            "max": 0.2727,
+            "n": 200
+          }
+        }
+      }
+    },
+    "structural_complexity": {
+      "low": {
+        "intended_level": "low",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "low": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "branching_factor": {
+            "mean": 0.975,
+            "std": 0.1565,
+            "min": 0,
+            "max": 1,
+            "n": 200
+          },
+          "number_of_components": {
+            "mean": 1,
+            "std": 0.0,
+            "min": 1,
+            "max": 1,
+            "n": 200
+          },
+          "betti_1": {
+            "mean": 0,
+            "std": 0.0,
+            "min": 0,
+            "max": 0,
+            "n": 200
+          }
+        }
+      },
+      "medium": {
+        "intended_level": "medium",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "medium": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "branching_factor": {
+            "mean": 2.02,
+            "std": 0.1404,
+            "min": 2,
+            "max": 3,
+            "n": 200
+          },
+          "number_of_components": {
+            "mean": 1,
+            "std": 0.0,
+            "min": 1,
+            "max": 1,
+            "n": 200
+          },
+          "betti_1": {
+            "mean": 1,
+            "std": 0.0,
+            "min": 1,
+            "max": 1,
+            "n": 200
+          }
+        }
+      },
+      "high": {
+        "intended_level": "high",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 0.92,
+          "n": 200,
+          "distribution": {
+            "high": 0.92,
+            "medium": 0.08
+          },
+          "ci_95": [
+            0.874,
+            0.9502
+          ],
+          "n_correct": 184
+        },
+        "features": {
+          "branching_factor": {
+            "mean": 4.53,
+            "std": 0.6412,
+            "min": 3,
+            "max": 5,
+            "n": 200
+          },
+          "number_of_components": {
+            "mean": 1,
+            "std": 0.0,
+            "min": 1,
+            "max": 1,
+            "n": 200
+          },
+          "betti_1": {
+            "mean": 2,
+            "std": 0.0,
+            "min": 2,
+            "max": 2,
+            "n": 200
+          }
+        }
+      },
+      "expert": {
+        "intended_level": "expert",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "expert": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "branching_factor": {
+            "mean": 9,
+            "std": 0.0,
+            "min": 9,
+            "max": 9,
+            "n": 200
+          },
+          "number_of_components": {
+            "mean": 1,
+            "std": 0.0,
+            "min": 1,
+            "max": 1,
+            "n": 200
+          },
+          "betti_1": {
+            "mean": 4,
+            "std": 0.0,
+            "min": 4,
+            "max": 4,
+            "n": 200
+          }
+        }
+      }
+    },
+    "spatial_scale": {
+      "low": {
+        "intended_level": "low",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "low": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "voxel_count": {
+            "mean": 7,
+            "std": 0.0,
+            "min": 7,
+            "max": 7,
+            "n": 200
+          }
+        }
+      },
+      "medium": {
+        "intended_level": "medium",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "medium": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "voxel_count": {
+            "mean": 11,
+            "std": 0.0,
+            "min": 11,
+            "max": 11,
+            "n": 200
+          }
+        }
+      },
+      "high": {
+        "intended_level": "high",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "high": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "voxel_count": {
+            "mean": 16,
+            "std": 0.0,
+            "min": 16,
+            "max": 16,
+            "n": 200
+          }
+        }
+      },
+      "expert": {
+        "intended_level": "expert",
+        "n_generated": 200,
+        "n_errors": 0,
+        "dimension_fidelity": {
+          "fidelity_rate": 1.0,
+          "n": 200,
+          "distribution": {
+            "expert": 1.0
+          },
+          "ci_95": [
+            0.9812,
+            1.0
+          ],
+          "n_correct": 200
+        },
+        "features": {
+          "voxel_count": {
+            "mean": 22,
+            "std": 0.0,
+            "min": 22,
+            "max": 22,
+            "n": 200
+          }
+        }
+      }
+    }
+  }
+}
