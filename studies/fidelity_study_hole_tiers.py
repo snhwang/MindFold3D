@@ -38,12 +38,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from cognitive_mapping import SkeletonSpec, HOLE_TIER_GRID
-from skeleton_generation import HoleMarkedLoopSkeleton, _count_components
-from shape_generation import _calculate_circuit_rank as calc_mu
-from topology_extras import cubical_betti_1
+from mindfold3d.cognitive_mapping import SkeletonSpec, HOLE_TIER_GRID
+from mindfold3d.skeleton_generation import HoleMarkedLoopSkeleton, _count_components
+from mindfold3d.shape_generation import _calculate_circuit_rank as calc_mu
+from mindfold3d.topology_extras import cubical_betti_1
 
 N_ATTEMPTS_MAX = 20   # matches the production budget in generate_shape_skeleton
 N_SHAPES_PER_CELL = 200
@@ -201,7 +201,7 @@ def main(n_shapes: int = N_SHAPES_PER_CELL):
         print(f"    failure modes: {result['failure_mode_counts']}", flush=True)
         print(f"    elapsed: {result['elapsed_seconds']:.1f}s", flush=True)
 
-    out_dir = Path(__file__).parent
+    out_dir = Path(__file__).resolve().parent.parent / "results"
     out_json = out_dir / "hole_tier_fidelity_N200.json"
     with open(out_json, "w") as f:
         json.dump(all_results, f, indent=2, default=str)

@@ -20,8 +20,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from cognitive_mapping import get_skeleton_spec
-from skeleton_generation import generate_shape_skeleton
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mindfold3d.cognitive_mapping import get_skeleton_spec
+from mindfold3d.skeleton_generation import generate_shape_skeleton
 
 TIERS = ["low", "medium", "high", "expert"]
 ALL_DIMS = ["spatial_form", "structural_complexity", "spatial_scale"]

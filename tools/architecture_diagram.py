@@ -226,7 +226,7 @@ def main():
     # Save publication-quality outputs before displaying.
     # PDF is vector (infinite resolution); the PNG is 600 DPI for journals
     # that require raster.
-    out_dir = os.path.join(os.path.dirname(__file__), "docs", "figures")
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "figures")
     os.makedirs(out_dir, exist_ok=True)
     pdf_path = os.path.join(out_dir, "Figure_1_System_Architecture.pdf")
     png_path = os.path.join(out_dir, "Figure_1_System_Architecture.png")

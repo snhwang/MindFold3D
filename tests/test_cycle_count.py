@@ -20,8 +20,8 @@ Run with:  python -m pytest test_cycle_count.py -v
 
 from typing import Set, Tuple
 
-from shape_generation import _calculate_circuit_rank as _calculate_cycle_count
-from topology_extras import cubical_betti_1
+from mindfold3d.shape_generation import _calculate_circuit_rank as _calculate_cycle_count
+from mindfold3d.topology_extras import cubical_betti_1
 
 Voxel = Tuple[int, int, int]
 GRID = (16, 16, 16)

@@ -7,12 +7,16 @@ dimension-level match rates.
 import random
 from collections import defaultdict
 
-from cognitive_mapping import (
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mindfold3d.cognitive_mapping import (
     get_skeleton_spec, reverse_map_cognitive_profile, cognitive_profile_to_dict,
     SHAPE_DIMENSIONS,
 )
-from skeleton_generation import generate_shape_skeleton
-from shape_features import ShapeFeatureSet
+from mindfold3d.skeleton_generation import generate_shape_skeleton
+from mindfold3d.shape_features import ShapeFeatureSet
 
 N_TRIALS = 20
 

@@ -21,13 +21,13 @@ import sys
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple, Any
 
-from cognitive_mapping import (
+from mindfold3d.cognitive_mapping import (
     SHAPE_DIMENSIONS,
     SkeletonSpec,
     get_skeleton_spec,
     reverse_map_cognitive_profile,
 )
-from skeleton_generation import (
+from mindfold3d.skeleton_generation import (
     SkeletonRule,
     generate_shape_skeleton,
     _optimize_geometry,
@@ -36,8 +36,8 @@ from skeleton_generation import (
     _count_components,
     _calculate_circuit_rank,
 )
-from shape_generation import analyze_shape_features
-from shape_features import ShapeFeatureSet
+from mindfold3d.shape_generation import analyze_shape_features
+from mindfold3d.shape_features import ShapeFeatureSet
 
 
 # =============================================================================
@@ -208,7 +208,7 @@ def _optimize_relaxed_branching(
     constraint gives the optimizer freedom to reshape the cluster for
     lower anisotropy while preserving only connectivity and cycle count.
     """
-    from cognitive_mapping import SHAPE_DIMENSIONS
+    from mindfold3d.cognitive_mapping import SHAPE_DIMENSIONS
 
     GEO_FEATURES = {
         "compactness_score", "planarity_score", "anisotropy_index",
@@ -268,7 +268,7 @@ def _optimize_relaxed_branching(
         return best
 
     def compute_geo(vs):
-        from skeleton_generation import (
+        from mindfold3d.skeleton_generation import (
             _calculate_compactness_score, _calculate_planarity_score,
             _get_pca_eigenvalues, _calculate_anisotropy_index,
             _calculate_shape_form_index,
@@ -459,7 +459,7 @@ def _generate_one(spec: SkeletonSpec, variant: str) -> Dict[str, Any]:
         return generate_with_compact(spec, relax_branching=True)
     elif variant == "current_relaxed":
         # Current TreeSkeleton but with relaxed branching optimizer
-        from skeleton_generation import TreeSkeleton
+        from mindfold3d.skeleton_generation import TreeSkeleton
         grid_size = spec.grid_size
         best_voxels = None
         for attempt in range(5):

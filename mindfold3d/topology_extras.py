@@ -57,7 +57,7 @@ from typing import List, Set, Tuple
 # We import _count_components from shape_generation to keep component-counting
 # semantics identical between the production circuit-rank metric and this
 # validation metric.
-from shape_generation import _count_components
+from mindfold3d.shape_generation import _count_components
 
 
 def _cube_corners(v: Tuple[int, int, int]) -> List[Tuple[int, int, int]]:

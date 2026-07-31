@@ -23,8 +23,8 @@ features are measured post-generation for verification only.
 import random
 from typing import List, Tuple, Dict, Any, Set
 
-from cognitive_mapping import SkeletonSpec
-from shape_generation import (
+from mindfold3d.cognitive_mapping import SkeletonSpec
+from mindfold3d.shape_generation import (
     analyze_shape_features,
     _get_neighbors,
     _count_components,
@@ -1245,7 +1245,7 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
             return False
         # Lazy import: topology_extras depends on shape_generation which
         # depends on this module transitively; keep the import local.
-        from topology_extras import cubical_betti_1
+        from mindfold3d.topology_extras import cubical_betti_1
         return cubical_betti_1(self.voxels) == target
 
 
@@ -1297,8 +1297,8 @@ def _optimize_geometry(
     This closes the round-trip: cognitive params → skeleton → optimize → features
     that reverse-map back to the original cognitive params.
     """
-    from cognitive_mapping import SHAPE_DIMENSIONS
-    from topology_extras import cubical_betti_1 as _cubical_b1
+    from mindfold3d.cognitive_mapping import SHAPE_DIMENSIONS
+    from mindfold3d.topology_extras import cubical_betti_1 as _cubical_b1
 
     # Build target ranges for geometric features only
     GEO_FEATURES = {
@@ -1819,7 +1819,7 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
             # shapes at 15 voxels), so β₁ = 0 is validated with regeneration
             # like every other β₁ target.
             if structurally_valid and not is_hole_tier and spec.num_loops == 0:
-                from topology_extras import cubical_betti_1
+                from mindfold3d.topology_extras import cubical_betti_1
                 if cubical_betti_1(skeleton.voxels) != 0:
                     structurally_valid = False
 
@@ -1890,8 +1890,8 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
         # smallest out-of-range deviation. The greedy optimizer stalls just
         # outside the target range in a minority of runs (boundary drift);
         # this retry converts a per-attempt hit rate of p into ~1-(1-p)^K.
-        from cognitive_mapping import SHAPE_DIMENSIONS as _SD
-        from shape_generation import (
+        from mindfold3d.cognitive_mapping import SHAPE_DIMENSIONS as _SD
+        from mindfold3d.shape_generation import (
             _calculate_anisotropy_index as _ai_of_eigs,
             _get_pca_eigenvalues as _pca_eigs,
             _calculate_symmetry_score as _sym_of,
@@ -1940,7 +1940,7 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
             if b1_preserve is not None:
                 # Regenerated candidates bypass the validation loop above, so
                 # re-check the β₁ invariant before accepting.
-                from topology_extras import cubical_betti_1
+                from mindfold3d.topology_extras import cubical_betti_1
                 if cubical_betti_1(cand) != b1_preserve:
                     continue
             cand_dev = _sf_deviation(cand)

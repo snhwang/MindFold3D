@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 
-import models
-import schemas
-from database import get_db
+from app import models
+from app import schemas
+from app.database import get_db
 
 load_dotenv()
 

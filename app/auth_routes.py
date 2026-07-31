@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 import uuid
 from fastapi.security import OAuth2PasswordRequestForm
 
-import schemas
-import models
-import auth
-import email_service
-from database import get_db, engine
+from app import schemas
+from app import models
+from app import auth
+from app import email_service
+from app.database import get_db, engine
 
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)

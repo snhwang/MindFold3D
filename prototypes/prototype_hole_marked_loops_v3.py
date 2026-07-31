@@ -18,10 +18,10 @@ from typing import Set, Tuple, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cognitive_mapping import SkeletonSpec
-from skeleton_generation import SkeletonRule, TreeSkeleton, _get_neighbors, _count_components
-from shape_generation import _calculate_cycle_count as calc_cycle_count
-from topology_extras import cubical_betti_1
+from mindfold3d.cognitive_mapping import SkeletonSpec
+from mindfold3d.skeleton_generation import SkeletonRule, TreeSkeleton, _get_neighbors, _count_components
+from mindfold3d.shape_generation import _calculate_cycle_count as calc_cycle_count
+from mindfold3d.topology_extras import cubical_betti_1
 
 # Reuse builders from v2
 from prototype_hole_marked_loops import (

@@ -28,13 +28,17 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from cognitive_mapping import (
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mindfold3d.cognitive_mapping import (
     SHAPE_DIMENSIONS,
     get_difficulty_spec,
     get_scored_feature_names,
 )
-from shape_features import ShapeFeatureSet
-from shape_generation import generate_shape_advanced
+from mindfold3d.shape_features import ShapeFeatureSet
+from mindfold3d.shape_generation import generate_shape_advanced
 
 
 # ── Scored features the generator actively optimizes ──────────────────────

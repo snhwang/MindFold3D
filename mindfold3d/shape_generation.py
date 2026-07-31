@@ -24,7 +24,7 @@ import random
 from typing import List, Tuple, Dict, Any, Optional, Set, Literal
 from collections import deque
 import math
-from shape_features import ShapeFeatureSet
+from mindfold3d.shape_features import ShapeFeatureSet
 
 
 # --- Helper functions for calculating features of a voxel list --- 
@@ -238,7 +238,7 @@ def _calculate_betti_1(voxels_set: Set[Tuple[int, int, int]], grid_size: Tuple[i
     graph invariant the generator's fill/scoring loops control.
     """
     # Lazy import: topology_extras imports _count_components from this module.
-    from topology_extras import cubical_betti_1
+    from mindfold3d.topology_extras import cubical_betti_1
     return cubical_betti_1(voxels_set)
 
 

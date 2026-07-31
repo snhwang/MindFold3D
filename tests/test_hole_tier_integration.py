@@ -16,12 +16,12 @@ from pathlib import Path
 # Make the sibling package importable when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from cognitive_mapping import SkeletonSpec
-from skeleton_generation import (
+from mindfold3d.cognitive_mapping import SkeletonSpec
+from mindfold3d.skeleton_generation import (
     HoleMarkedLoopSkeleton,
     generate_shape_skeleton,
 )
-from topology_extras import cubical_betti_1
+from mindfold3d.topology_extras import cubical_betti_1
 
 
 def _make_spec(num_loops: int, voxel_count: int = 25, target_b1: int | None = None,

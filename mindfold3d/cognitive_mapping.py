@@ -30,7 +30,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple, Any
 
-from shape_features import ShapeFeatureSet
+from mindfold3d.shape_features import ShapeFeatureSet
 
 
 # =============================================================================

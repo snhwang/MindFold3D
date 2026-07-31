@@ -29,13 +29,17 @@ from collections import defaultdict
 from itertools import product
 from typing import Dict, List, Tuple
 
-from cognitive_mapping import (
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mindfold3d.cognitive_mapping import (
     SHAPE_DIMENSIONS,
     get_skeleton_spec,
     reverse_map_cognitive_profile,
 )
-from skeleton_generation import generate_shape_skeleton
-from shape_features import ShapeFeatureSet
+from mindfold3d.skeleton_generation import generate_shape_skeleton
+from mindfold3d.shape_features import ShapeFeatureSet
 
 
 LEVELS = ["low", "medium", "high", "expert"]
