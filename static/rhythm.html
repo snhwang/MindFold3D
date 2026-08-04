@@ -928,10 +928,14 @@
 
     // ── Target HUD rendering ──
     let targetScene, targetCamera, targetRenderer;
+    // Generation counter: bumping it retires the previous round's
+    // animateTarget loop, which would otherwise keep rendering the old
+    // scene forever (the overlay-screen check keeps it alive between
+    // rounds).
+    let targetAnimGen = 0;
 
     function renderTargetHUD(voxels, gridSize) {
       const container = document.getElementById('target-render');
-      container.innerHTML = '';
 
       // Use the container's actual CSS size — the target HUD shrinks to
       // 76×76 / 64×64 on phones, but this used to be hardcoded at 140×140
@@ -940,17 +944,40 @@
       const ch = Math.max(1, container.clientHeight || 140);
       const aspect = cw / ch;
 
+      // Retire the previous round's animation loop and release its GPU
+      // resources before rebuilding the scene.
+      targetAnimGen += 1;
+      const gen = targetAnimGen;
+      if (targetScene) {
+        targetScene.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          const m = obj.material;
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else if (m) m.dispose();
+        });
+      }
+
       targetScene = new THREE.Scene();
       targetScene.background = new THREE.Color(0x0a0a20);
 
       const fovDeg = 45;
       targetCamera = new THREE.PerspectiveCamera(fovDeg, aspect, 0.1, 100);
 
-      targetRenderer = new THREE.WebGLRenderer({ antialias: true });
+      // Reuse a single renderer across rounds. Creating a new
+      // WebGLRenderer per round leaks WebGL contexts (removing the old
+      // canvas from the DOM does not release its context), and after
+      // 8-16 rounds the browser evicts the oldest context, which is the
+      // main game view, leaving the screen blank.
+      if (!targetRenderer) {
+        targetRenderer = new THREE.WebGLRenderer({ antialias: true });
+      }
       targetRenderer.setSize(cw, ch);
       // Crisp output on hi-DPI phone screens.
       targetRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      container.appendChild(targetRenderer.domElement);
+      if (targetRenderer.domElement.parentNode !== container) {
+        container.innerHTML = '';
+        container.appendChild(targetRenderer.domElement);
+      }
 
       const light1 = new THREE.AmbientLight(0xffffff, 0.5);
       targetScene.add(light1);
@@ -982,6 +1009,7 @@
 
       // Slowly rotate in the HUD
       function animateTarget() {
+        if (gen !== targetAnimGen) return;
         if (!STATE.running && !document.getElementById('overlay-screen').style.display) return;
         requestAnimationFrame(animateTarget);
         group.rotation.y += 0.01;
