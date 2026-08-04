@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MindFold 3D – Rhythm Mode</title>
+  <!--OG_META-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a1a;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #game-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* ── HUD overlay ── */
+    #hud {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #hud > * { pointer-events: auto; }
+
+    /* Target display (top-left) */
+    #target-hud {
+      position: absolute;
+      top: 16px; left: 16px;
+      background: rgba(0, 10, 30, 0.85);
+      border: 2px solid #00ccff;
+      border-radius: 12px;
+      padding: 8px;
+      width: 160px;
+    }
+
+    #target-hud .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #00ccff;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    #target-render {
+      width: 140px;
+      height: 140px;
+      margin: 0 auto;
+    }
+
+    /* Score (top-right) */
+    #score-panel {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(0, 10, 30, 0.85);
+      border: 2px solid #00ccff;
+      border-radius: 12px;
+      padding: 12px 20px;
+      text-align: right;
+      min-width: 160px;
+    }
+
+    #score-panel .score-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+
+    #score-panel .combo {
+      font-size: 14px;
+      color: #00ccff;
+      margin-top: 4px;
+    }
+
+    #score-panel .stats {
+      font-size: 12px;
+      color: #8899aa;
+      margin-top: 6px;
+    }
+
+    /* Center feedback */
+    #feedback {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      font-weight: 900;
+      opacity: 0;
+      transition: opacity 0.15s;
+      text-shadow: 0 0 30px currentColor;
+      pointer-events: none;
+    }
+
+    #feedback.hit { color: #00ff88; opacity: 1; }
+    #feedback.miss { color: #ff3355; opacity: 1; }
+    #feedback.wrong { color: #ff8800; opacity: 1; }
+    #feedback.hit-player { color: #ff2244; opacity: 1; }
+
+    /* Red screen-edge flash when a shape reaches the player's lane. */
+    #hit-flash {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 120px 40px rgba(255, 40, 60, 0.85);
+      opacity: 0;
+      transition: opacity 0.12s ease-out;
+      z-index: 20;
+    }
+    #hit-flash.active { opacity: 1; }
+
+    /* On-screen lane buttons for touch devices (also clickable with mouse). */
+    #lane-buttons {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+      display: flex;
+      justify-content: space-between;
+      padding: 0 16px;
+      pointer-events: none; /* children re-enable */
+      z-index: 15;
+    }
+    #lane-buttons button {
+      pointer-events: auto;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 204, 255, 0.6);
+      background: rgba(0, 10, 30, 0.65);
+      color: #00ccff;
+      font-size: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+      transition: transform 0.08s, background 0.15s;
+    }
+    #lane-buttons button:active {
+      transform: scale(0.92);
+      background: rgba(0, 40, 70, 0.85);
+    }
+    #lane-buttons button:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+    }
+
+    /* Prevent browser gesture interference on the game canvas and HUD. */
+    html, body {
+      overscroll-behavior: none;
+      touch-action: none;
+      -webkit-user-select: none;
+         -moz-user-select: none;
+              user-select: none;
+    }
+
+    /* Narrow-screen (phone) layout. Three-row HUD:
+         row 1 (top):    mode switcher centred (very small)
+         row 2 (below):  target card (left)   |   score card (right)
+         row 3 (bottom): lane buttons (corners)
+       This stops target / score / mode-switcher from fighting for the
+       same top edge and guarantees the score is always fully visible. */
+    @media (max-width: 640px) {
+      /* Mode switcher at the very top-centre, slim. !important is needed
+         because the base rule appears later in source order. */
+      #mode-switcher {
+        top: 6px !important;
+        gap: 4px !important;
+      }
+      #mode-switcher button {
+        width: 30px !important;
+        height: 30px !important;
+        font-size: 12px !important;
+        border-radius: 5px !important;
+      }
+
+      /* Target card shifted down so it clears the mode switcher. */
+      #target-hud {
+        width: 88px;
+        padding: 4px;
+        top: 44px; left: 8px;
+        border-radius: 8px;
+      }
+      #target-render { width: 76px; height: 76px; }
+      #target-hud .label {
+        font-size: 9px;
+        letter-spacing: 1px;
+        margin-bottom: 2px;
+      }
+
+      /* Score card shifted down too, and given enough width for
+         the 'x12 combo' / 'Hit N / M' lines. */
+      #score-panel {
+        top: 44px; right: 8px;
+        padding: 6px 10px;
+        min-width: 112px;
+        max-width: 45vw;
+        border-radius: 8px;
+      }
+      #score-panel .score-value { font-size: 22px; }
+      #score-panel .combo { font-size: 11px; margin-top: 2px; }
+      #score-panel .stats { font-size: 10px; margin-top: 3px; }
+
+      #feedback { font-size: 32px; }
+
+      /* Speed indicator at bottom-centre above the lane buttons so it
+         never sits under the left button / off-screen. !important is
+         needed because the base #speed-indicator rule appears later in
+         source order and would otherwise win the cascade. */
+      #speed-indicator {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 100px) !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%);
+        font-size: 10px;
+        background: rgba(0, 10, 30, 0.55);
+        padding: 2px 8px;
+        border-radius: 10px;
+      }
+
+      /* Lane buttons: smaller on phones so they don't obscure the corridor. */
+      #lane-buttons {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+        padding: 0 12px;
+      }
+      #lane-buttons button {
+        width: 60px;
+        height: 60px;
+        font-size: 24px;
+      }
+
+      /* Overlay screen scrollable for tall instructions. */
+      #overlay-screen {
+        overflow-y: auto;
+        justify-content: flex-start;
+        padding: 24px 16px;
+        touch-action: pan-y;
+      }
+      #overlay-screen h1 { font-size: 30px; }
+      #overlay-screen .instructions { font-size: 13px; }
+      #overlay-screen .final-score { font-size: 44px; }
+    }
+
+    /* Very small phones (<= 360 px) or short landscape: tighten further. */
+    @media (max-width: 360px) {
+      #target-hud { width: 76px; }
+      #target-render { width: 64px; height: 64px; }
+      #score-panel { min-width: 96px; max-width: 42vw; }
+      #score-panel .score-value { font-size: 20px; }
+    }
+
+    /* Short / landscape phones: vertical room is scarce, so the speed
+       indicator would otherwise collide with the lane buttons. Hide it
+       since speed is a nice-to-have, not core gameplay info. */
+    @media (max-height: 500px) {
+      #speed-indicator {
+        display: none !important;
+      }
+    }
+
+    /* Crosshair */
+    #crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px; height: 32px;
+      pointer-events: none;
+    }
+
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(0, 204, 255, 0.5);
+    }
+
+    #crosshair::before {
+      width: 2px; height: 100%;
+      left: 50%; transform: translateX(-50%);
+    }
+
+    #crosshair::after {
+      width: 100%; height: 2px;
+      top: 50%; transform: translateY(-50%);
+    }
+
+    /* Start / Game over screen */
+    #overlay-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(5, 5, 20, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    #overlay-screen h1 {
+      font-size: 42px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #00ccff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #overlay-screen .subtitle {
+      font-size: 16px;
+      color: #8899aa;
+      margin-bottom: 30px;
+    }
+
+    #overlay-screen .final-score {
+      font-size: 64px;
+      font-weight: 900;
+      color: #fff;
+      margin: 10px 0;
+    }
+
+    #overlay-screen .final-stats {
+      font-size: 16px;
+      color: #8899aa;
+      margin-bottom: 24px;
+    }
+
+    #overlay-screen button {
+      background: linear-gradient(135deg, #00ccff, #0088cc);
+      color: #fff;
+      border: none;
+      padding: 14px 40px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 6px;
+      transition: transform 0.1s;
+    }
+
+    #overlay-screen button:hover { transform: scale(1.05); }
+
+    #overlay-screen .instructions {
+      max-width: 420px;
+      text-align: center;
+      color: #aabbcc;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    /* Speed indicator */
+    #speed-indicator {
+      position: absolute;
+      bottom: 16px; left: 16px;
+      font-size: 12px;
+      color: #556677;
+      pointer-events: none;
+    }
+
+    /* Saber trail canvas */
+    #saber-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    /* Mode switcher (Recognition / Builder / Rhythm) */
+    #mode-switcher {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 10;
+      pointer-events: auto;
+    }
+    #mode-switcher button {
+      background: rgba(20, 30, 45, 0.8);
+      border: 1px solid #334;
+      color: #8899aa;
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 120ms ease;
+    }
+    #mode-switcher button:hover {
+      border-color: #00ccff;
+      color: #00ccff;
+    }
+    #mode-switcher button.active {
+      background: #0a2a3a;
+      border-color: #00ccff;
+      color: #00ccff;
+    }
+    /* Logout button lives inside the overlay screen so it never overlaps
+       the score HUD during gameplay. Styled as a neutral secondary
+       action beneath the primary Start button. */
+    #logout-btn-rhythm {
+      display: inline-block;
+      margin-top: 16px;
+      background: transparent;
+      border: 1px solid #334;
+      color: #8899aa;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 120ms ease;
+    }
+    #logout-btn-rhythm:hover {
+      border-color: #ff5555;
+      color: #ff8888;
+    }
+
+    /* ── Portrait-only on phones ──
+       Phone landscape clips the game HUD/canvas. Show a friendly overlay
+       asking the user to rotate. Tablets/desktops unaffected. */
+    #portrait-lock-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #f4f6f8;
+      color: #2a3b4d;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 1rem;
+    }
+    #portrait-lock-overlay .icon {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; color: #007acc;
+      animation: rotate-hint 2.5s ease-in-out infinite;
+    }
+    #portrait-lock-overlay h2 { margin: 0; font-size: 1.25rem; color: #2a3b4d; }
+    #portrait-lock-overlay p { margin: 0; font-size: 0.95rem; color: #5a6a7d; max-width: 320px; }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(-90deg); }
+      50% { transform: rotate(0deg); }
+    }
+    @media (max-width: 900px) and (orientation: landscape) {
+      #portrait-lock-overlay { display: flex !important; }
+      body > *:not(#portrait-lock-overlay) { visibility: hidden !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Portrait-only overlay: shown on phone-sized landscape viewports. -->
+  <div id="portrait-lock-overlay" role="dialog" aria-modal="true" aria-label="Rotate your device">
+    <div class="icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="7" y="2" width="10" height="20" rx="2" ry="2"/>
+        <line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+    </div>
+    <h2>Please rotate your device</h2>
+    <p>MindFold 3D is designed for portrait orientation on phones. Rotate your device upright to continue.</p>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+  <canvas id="saber-canvas"></canvas>
+
+  <div id="hud">
+    <div id="target-hud">
+      <div class="label">Target</div>
+      <div id="target-render"></div>
+    </div>
+
+    <div id="score-panel">
+      <div class="score-value" id="score-display">0</div>
+      <div class="combo" id="combo-display"></div>
+      <div class="stats" id="stats-display">0 / 0</div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="feedback"></div>
+    <div id="hit-flash"></div>
+    <div id="speed-indicator">Speed: 1.0x</div>
+
+    <div id="lane-buttons">
+      <button id="lane-left-btn" type="button" aria-label="Move left"><i class="fas fa-chevron-left"></i></button>
+      <button id="lane-right-btn" type="button" aria-label="Move right"><i class="fas fa-chevron-right"></i></button>
+    </div>
+
+    <div id="mode-switcher">
+      <button type="button" title="Home (mode picker)" aria-label="Home"
+              onclick="window.location.href='/home'"><i class="fas fa-home"></i></button>
+      <button type="button" title="Multiple Choice mode" aria-label="Multiple Choice"
+              onclick="window.location.href='/?mode=recognition'"><i class="fas fa-eye"></i></button>
+      <button type="button" title="Structure Builder mode" aria-label="Structure Builder"
+              onclick="window.location.href='/?mode=builder'"><i class="fas fa-cubes"></i></button>
+      <button type="button" class="active" title="Rhythm Mode (you are here)" aria-label="Rhythm Mode"><i class="fas fa-music"></i></button>
+    </div>
+
+  </div>
+
+  <div id="overlay-screen">
+    <h1>MindFold 3D</h1>
+    <div class="subtitle">Rhythm Mode</div>
+    <div class="instructions">
+      Shapes fly toward you down a corridor.<br>
+      <strong>Tap or click matching shapes</strong> to slash them — combo builds points.<br>
+      <strong>Dodge the rest</strong>: on desktop use <strong>A/D</strong> or <strong>←/→</strong>; on touch, use the <strong>◀ ▶</strong> buttons. A shape that reaches your lane costs more than one that passes by.<br>
+      <strong>Don't slash distractors</strong> — hitting the wrong shape costs points.
+    </div>
+    <div style="margin-bottom: 20px;">
+      <label style="color: #8899aa; font-size: 14px; margin-right: 8px;">Speed:</label>
+      <button class="speed-btn" onclick="setStartSpeed(0.3)" data-speed="0.3" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 1px solid #334; background: #1a1a2e; color: #8899aa; cursor: pointer; font-size: 14px;">Relaxed</button>
+      <button class="speed-btn selected" onclick="setStartSpeed(0.6)" data-speed="0.6" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 2px solid #00ccff; background: #0a2a3a; color: #00ccff; cursor: pointer; font-size: 14px;">Moderate</button>
+      <button class="speed-btn" onclick="setStartSpeed(1.0)" data-speed="1.0" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 1px solid #334; background: #1a1a2e; color: #8899aa; cursor: pointer; font-size: 14px;">Intense</button>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <label style="color: #8899aa; font-size: 14px; margin-right: 8px;">Rotation:</label>
+      <button class="rot-btn" onclick="setRotSpeed(0)" data-rot="0" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 1px solid #334; background: #1a1a2e; color: #8899aa; cursor: pointer; font-size: 14px;">None</button>
+      <button class="rot-btn selected" onclick="setRotSpeed(1)" data-rot="1" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 2px solid #00ccff; background: #0a2a3a; color: #00ccff; cursor: pointer; font-size: 14px;">Slow</button>
+      <button class="rot-btn" onclick="setRotSpeed(2.5)" data-rot="2.5" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 1px solid #334; background: #1a1a2e; color: #8899aa; cursor: pointer; font-size: 14px;">Medium</button>
+      <button class="rot-btn" onclick="setRotSpeed(5)" data-rot="5" style="padding: 8px 16px; margin: 0 4px; border-radius: 6px; border: 1px solid #334; background: #1a1a2e; color: #8899aa; cursor: pointer; font-size: 14px;">Fast</button>
+    </div>
+    <button id="start-btn" onclick="startGame()">Start</button>
+    <button id="logout-btn-rhythm" type="button" title="Log out" onclick="rhythmLogout()">
+      <i class="fas fa-sign-out-alt"></i> Log out
+    </button>
+  </div>
+
+  <script>
+    // Logout handler, defined as a plain script so the inline onclick
+    // can call it regardless of module load order.
+    window.rhythmLogout = function () {
+      localStorage.removeItem('token');
+      window.location.href = '/static/auth.html';
+    };
+  </script>
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.155.0';
+
+    // ── Auth ──
+    function getToken() {
+      return localStorage.getItem('token') ||
+             localStorage.getItem('mindfold3d-token') ||
+             localStorage.getItem('access_token');
+    }
+
+    function authHeaders() {
+      const token = getToken();
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
+    // ── Game state ──
+    let startSpeed = 0.6;
+    let rotSpeed = 1.0;
+
+    window.setStartSpeed = function(spd) {
+      startSpeed = spd;
+      document.querySelectorAll('.speed-btn').forEach(btn => {
+        if (parseFloat(btn.dataset.speed) === spd) {
+          btn.style.border = '2px solid #00ccff';
+          btn.style.background = '#0a2a3a';
+          btn.style.color = '#00ccff';
+        } else {
+          btn.style.border = '1px solid #334';
+          btn.style.background = '#1a1a2e';
+          btn.style.color = '#8899aa';
+        }
+      });
+    };
+
+    window.setRotSpeed = function(spd) {
+      rotSpeed = spd;
+      document.querySelectorAll('.rot-btn').forEach(btn => {
+        if (parseFloat(btn.dataset.rot) === spd) {
+          btn.style.border = '2px solid #00ccff';
+          btn.style.background = '#0a2a3a';
+          btn.style.color = '#00ccff';
+        } else {
+          btn.style.border = '1px solid #334';
+          btn.style.background = '#1a1a2e';
+          btn.style.color = '#8899aa';
+        }
+      });
+    };
+
+    const meshToEntry = new WeakMap();
+
+    const STATE = {
+      running: false,
+      score: 0,
+      combo: 0,
+      maxCombo: 0,
+      hits: 0,
+      misses: 0,    // missed targets that passed
+      wrong: 0,     // clicked distractors
+      total: 0,
+      speed: 1.0,
+      shapeQueue: [],
+      activeShapes: [],
+      targetData: null,
+      batchPending: false,
+      clock: new THREE.Clock(),
+      playerLane: 1,  // 0=left, 1=center, 2=right
+      playerX: 0,
+      keysDown: {},
+    };
+
+    // ── Three.js setup ──
+    const canvas = document.getElementById('game-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060612);
+    scene.fog = new THREE.Fog(0x060612, 30, 80);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 2, 0);
+    camera.lookAt(0, 2, -50);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0x223344, 0.6);
+    scene.add(ambient);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(5, 10, 5);
+    scene.add(mainLight);
+
+    const blueLight = new THREE.PointLight(0x00ccff, 1.5, 60);
+    blueLight.position.set(-3, 4, -20);
+    scene.add(blueLight);
+
+    const pinkLight = new THREE.PointLight(0xff3388, 1.0, 60);
+    pinkLight.position.set(3, 4, -20);
+    scene.add(pinkLight);
+
+    // ── Corridor ──
+    const LANE_LENGTH = 70;
+    const SPAWN_Z = -LANE_LENGTH;
+    const KILL_Z = 3;
+    const HIT_ZONE_Z = -2;
+    const HIT_ZONE_DEPTH = 5;
+    const LANES = [-3, 0, 3];  // x positions for 3 lanes
+    const LANE_MOVE_SPEED = 12; // how fast the camera strafes
+
+    // ── Audio / Beat sync ──
+    let audioCtx = null;
+    let audioBuffer = null;
+    let audioSource = null;
+    let audioStartTime = 0;
+    const TRACK_BPM = 130;
+    const BEAT_INTERVAL = 60 / TRACK_BPM; // ~0.46s per beat
+    let lastBeatTime = 0;
+    let beatPulse = 0; // 0-1 pulse that decays after each beat
+    let audioLoaded = false;
+
+    async function loadAudio() {
+      if (audioLoaded) return;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const response = await fetch('/static/audio/ascend.ogg');
+        const arrayBuffer = await response.arrayBuffer();
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        audioLoaded = true;
+        console.log('Audio loaded:', audioBuffer.duration.toFixed(1), 'seconds');
+      } catch (err) {
+        console.warn('Audio failed to load, continuing without music:', err);
+      }
+    }
+
+    function startAudio() {
+      if (!audioCtx || !audioBuffer) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      stopAudio();
+
+      audioSource = audioCtx.createBufferSource();
+      audioSource.buffer = audioBuffer;
+      audioSource.loop = true;
+
+      // Add a slight gain so it doesn't overpower
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0.4;
+      audioSource.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      audioSource.start();
+      audioStartTime = audioCtx.currentTime;
+      lastBeatTime = audioStartTime;
+    }
+
+    function stopAudio() {
+      if (audioSource) {
+        try { audioSource.stop(); } catch(e) {}
+        audioSource = null;
+      }
+    }
+
+    function updateBeatPulse() {
+      if (!audioCtx || !audioBuffer) return;
+      const elapsed = audioCtx.currentTime - audioStartTime;
+      const beatPosition = elapsed / BEAT_INTERVAL;
+      const currentBeat = Math.floor(beatPosition);
+      const lastBeat = Math.floor((audioCtx.currentTime - BEAT_INTERVAL * 0.016 - audioStartTime) / BEAT_INTERVAL);
+
+      // Detect new beat
+      if (currentBeat !== Math.floor(lastBeatTime)) {
+        beatPulse = 1.0;
+      }
+      lastBeatTime = beatPosition;
+
+      // Decay
+      beatPulse *= 0.88;
+      if (beatPulse < 0.01) beatPulse = 0;
+    }
+
+    // Floor
+    const floorGeo = new THREE.PlaneGeometry(12, LANE_LENGTH);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0a20,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, -0.5, -LANE_LENGTH / 2);
+    scene.add(floor);
+
+    // Lane lines
+    const laneLineMaterials = [];
+    function createLaneLine(x) {
+      const geo = new THREE.PlaneGeometry(0.04, LANE_LENGTH);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00ccff, transparent: true, opacity: 0.3 });
+      const line = new THREE.Mesh(geo, mat);
+      line.rotation.x = -Math.PI / 2;
+      line.position.set(x, -0.48, -LANE_LENGTH / 2);
+      scene.add(line);
+      laneLineMaterials.push(mat);
+    }
+    createLaneLine(-4.5);
+    createLaneLine(-1.5);
+    createLaneLine(1.5);
+    createLaneLine(4.5);
+
+    // Dash lines down center
+    for (let z = 0; z > -LANE_LENGTH; z -= 4) {
+      const geo = new THREE.PlaneGeometry(0.03, 1.5);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00ccff, transparent: true, opacity: 0.15 });
+      const dash = new THREE.Mesh(geo, mat);
+      dash.rotation.x = -Math.PI / 2;
+      dash.position.set(0, -0.48, z);
+      scene.add(dash);
+    }
+
+    // Hit zone marker (glowing line on the ground)
+    const hitZoneGeo = new THREE.PlaneGeometry(10, 0.15);
+    const hitZoneMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.5 });
+    const hitZone = new THREE.Mesh(hitZoneGeo, hitZoneMat);
+    hitZone.rotation.x = -Math.PI / 2;
+    hitZone.position.set(0, -0.47, HIT_ZONE_Z);
+    scene.add(hitZone);
+
+    // ── Saber trail (2D canvas overlay) ──
+    const saberCanvas = document.getElementById('saber-canvas');
+    const saberCtx = saberCanvas.getContext('2d');
+    saberCanvas.width = window.innerWidth;
+    saberCanvas.height = window.innerHeight;
+
+    let saberTrails = [];
+
+    function spawnSaberSlash(x, y) {
+      const angle = -0.5 + Math.random() * 1.0;
+      saberTrails.push({
+        x, y, angle,
+        life: 1.0,
+        length: 120 + Math.random() * 60,
+      });
+    }
+
+    function updateSaberTrails(dt) {
+      saberCtx.clearRect(0, 0, saberCanvas.width, saberCanvas.height);
+      saberTrails = saberTrails.filter(t => t.life > 0);
+
+      for (const trail of saberTrails) {
+        trail.life -= dt * 4;
+        if (trail.life <= 0) continue;
+
+        const alpha = trail.life;
+        const len = trail.length * (1 - trail.life * 0.3);
+        const dx = Math.cos(trail.angle) * len;
+        const dy = Math.sin(trail.angle) * len;
+
+        // Glow
+        saberCtx.save();
+        saberCtx.globalAlpha = alpha * 0.4;
+        saberCtx.strokeStyle = '#00ccff';
+        saberCtx.lineWidth = 16;
+        saberCtx.lineCap = 'round';
+        saberCtx.shadowColor = '#00ccff';
+        saberCtx.shadowBlur = 30;
+        saberCtx.beginPath();
+        saberCtx.moveTo(trail.x - dx * 0.5, trail.y - dy * 0.5);
+        saberCtx.lineTo(trail.x + dx * 0.5, trail.y + dy * 0.5);
+        saberCtx.stroke();
+
+        // Core
+        saberCtx.globalAlpha = alpha * 0.9;
+        saberCtx.strokeStyle = '#ffffff';
+        saberCtx.lineWidth = 3;
+        saberCtx.shadowBlur = 10;
+        saberCtx.beginPath();
+        saberCtx.moveTo(trail.x - dx * 0.5, trail.y - dy * 0.5);
+        saberCtx.lineTo(trail.x + dx * 0.5, trail.y + dy * 0.5);
+        saberCtx.stroke();
+        saberCtx.restore();
+      }
+    }
+
+    // ── Build voxel shape as Three.js Group ──
+    function buildShapeGroup(voxels, gridSize, color = 0x00aaff) {
+      const group = new THREE.Group();
+      if (!voxels || voxels.length === 0) return group;
+
+      const geometry = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.3,
+        metalness: 0.2,
+        emissive: new THREE.Color(color),
+        emissiveIntensity: 0.15,
+      });
+
+      // Center the shape
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (const [x, y, z] of voxels) {
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+      }
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const cz = (minZ + maxZ) / 2;
+
+      for (const [x, y, z] of voxels) {
+        const cube = new THREE.Mesh(geometry, material.clone());
+        cube.position.set(x - cx, y - cy, z - cz);
+        group.add(cube);
+      }
+
+      // Scale to a consistent visual size
+      const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
+      const targetSize = 2.0;
+      group.scale.setScalar(targetSize / extent);
+
+      return group;
+    }
+
+    // ── Explosion effect ──
+    function explodeShape(shapeEntry) {
+      const group = shapeEntry.mesh;
+      const worldPos = new THREE.Vector3();
+      group.getWorldPosition(worldPos);
+
+      // Create small particles flying outward
+      for (const child of [...group.children]) {
+        const particle = child.clone();
+        const childWorld = new THREE.Vector3();
+        child.getWorldPosition(childWorld);
+
+        particle.position.copy(childWorld);
+        particle.scale.copy(group.scale);
+
+        // Random velocity outward
+        const vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 12,
+          Math.random() * 8 + 2,
+          (Math.random() - 0.5) * 12,
+        );
+
+        scene.add(particle);
+
+        // Animate
+        const startTime = performance.now();
+        function animateParticle() {
+          const elapsed = (performance.now() - startTime) / 1000;
+          if (elapsed > 0.8) {
+            scene.remove(particle);
+            return;
+          }
+          particle.position.add(vel.clone().multiplyScalar(0.016));
+          vel.y -= 15 * 0.016; // gravity
+          particle.material.opacity = 1 - elapsed / 0.8;
+          particle.material.transparent = true;
+          particle.scale.multiplyScalar(0.96);
+          requestAnimationFrame(animateParticle);
+        }
+        animateParticle();
+      }
+
+      scene.remove(group);
+    }
+
+    // ── Target HUD rendering ──
+    let targetScene, targetCamera, targetRenderer;
+
+    function renderTargetHUD(voxels, gridSize) {
+      const container = document.getElementById('target-render');
+      container.innerHTML = '';
+
+      // Use the container's actual CSS size — the target HUD shrinks to
+      // 76×76 / 64×64 on phones, but this used to be hardcoded at 140×140
+      // which made the canvas overflow and the shape look mis-scaled.
+      const cw = Math.max(1, container.clientWidth || 140);
+      const ch = Math.max(1, container.clientHeight || 140);
+      const aspect = cw / ch;
+
+      targetScene = new THREE.Scene();
+      targetScene.background = new THREE.Color(0x0a0a20);
+
+      const fovDeg = 45;
+      targetCamera = new THREE.PerspectiveCamera(fovDeg, aspect, 0.1, 100);
+
+      targetRenderer = new THREE.WebGLRenderer({ antialias: true });
+      targetRenderer.setSize(cw, ch);
+      // Crisp output on hi-DPI phone screens.
+      targetRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      container.appendChild(targetRenderer.domElement);
+
+      const light1 = new THREE.AmbientLight(0xffffff, 0.5);
+      targetScene.add(light1);
+      const light2 = new THREE.DirectionalLight(0xffffff, 0.8);
+      light2.position.set(5, 5, 5);
+      targetScene.add(light2);
+
+      const group = buildShapeGroup(voxels, gridSize, 0x00ccff);
+      targetScene.add(group);
+
+      // Auto-fit camera to the shape's actual bounding sphere instead of
+      // using a hardcoded (4,4,4) position. With a fixed distance, smaller
+      // shapes appeared as tiny dots and bigger ones could clip the box.
+      // We fit on whichever axis is the tighter constraint (so wide and
+      // tall shapes both end up fully visible regardless of HUD aspect).
+      const bbox = new THREE.Box3().setFromObject(group);
+      const sphere = bbox.getBoundingSphere(new THREE.Sphere());
+      const radius = Math.max(sphere.radius, 0.5);
+      const fovV = (fovDeg * Math.PI) / 180;
+      const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
+      const distV = radius / Math.sin(fovV / 2);
+      const distH = radius / Math.sin(fovH / 2);
+      const padding = 1.25;
+      const dist = Math.max(distV, distH) * padding;
+      // Iso-style angle so we see depth, not just one face.
+      const dir = new THREE.Vector3(1, 1, 1).normalize();
+      targetCamera.position.copy(dir.multiplyScalar(dist).add(sphere.center));
+      targetCamera.lookAt(sphere.center);
+
+      // Slowly rotate in the HUD
+      function animateTarget() {
+        if (!STATE.running && !document.getElementById('overlay-screen').style.display) return;
+        requestAnimationFrame(animateTarget);
+        group.rotation.y += 0.01;
+        targetRenderer.render(targetScene, targetCamera);
+      }
+      animateTarget();
+      targetRenderer.render(targetScene, targetCamera);
+    }
+
+    // ── Fetch shape batch from backend ──
+    async function fetchBatch() {
+      if (STATE.batchPending) return;
+      STATE.batchPending = true;
+
+      try {
+        const res = await fetch(
+          `/get-rhythm-batch?batch_size=12&target_ratio=0.4&generation_mode=skeleton`,
+          { headers: authHeaders() }
+        );
+
+        if (res.status === 401) {
+          alert('Please log in first through the main MindFold3D page.');
+          window.location.href = '/';
+          return;
+        }
+
+        const data = await res.json();
+        STATE.targetData = data.target;
+
+        // Render target in HUD
+        renderTargetHUD(data.target.voxels, data.target.grid_size);
+
+        // Queue the shapes
+        for (const shape of data.stream) {
+          STATE.shapeQueue.push(shape);
+        }
+
+        console.log(`Fetched batch: ${data.stream.length} shapes queued (total queue: ${STATE.shapeQueue.length})`);
+      } catch (err) {
+        console.error('Failed to fetch rhythm batch:', err);
+      } finally {
+        STATE.batchPending = false;
+      }
+    }
+
+    // ── Spawn shape into the corridor ──
+    let spawnTimer = 0;
+    const BASE_SPAWN_INTERVAL = 2.0; // seconds between spawns
+
+    function spawnShape(shapeData) {
+      // Random color per shape — visually exciting and prevents using color as a cue
+      const hue = Math.random();
+      const color = new THREE.Color().setHSL(hue, 0.7, 0.55);
+      const group = buildShapeGroup(shapeData.voxels, shapeData.grid_size, color);
+
+      // Random rotation so targets aren't instantly recognizable by orientation
+      group.rotation.set(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+      );
+
+      // Spawn in a random lane
+      const laneIdx = Math.floor(Math.random() * LANES.length);
+      const laneX = LANES[laneIdx];
+      group.position.set(laneX, 2, SPAWN_Z);
+
+      scene.add(group);
+
+      STATE.activeShapes.push({
+        mesh: group,
+        data: shapeData,
+        z: SPAWN_Z,
+        x: laneX,
+        laneIdx: laneIdx, // stored so KILL_Z handler can compare to player's lane
+        hit: false,
+      });
+    }
+
+    // ── Raycaster for click detection ──
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function onCanvasClick(event) {
+      if (!STATE.running) return;
+
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      // Check intersection with active shapes
+      const meshes = STATE.activeShapes
+        .filter(s => !s.hit)
+        .flatMap(s => {
+          // Tag children with parent ref
+          s.mesh.children.forEach(c => { meshToEntry.set(c, s); });
+          return s.mesh.children;
+        });
+
+      const intersects = raycaster.intersectObjects(meshes, false);
+
+      // Saber slash visual
+      spawnSaberSlash(event.clientX, event.clientY);
+
+      if (intersects.length > 0) {
+        const entry = meshToEntry.get(intersects[0].object);
+        if (!entry || entry.hit) return;
+
+        entry.hit = true;
+
+        if (entry.data.is_target) {
+          // Correct hit
+          STATE.combo++;
+          STATE.maxCombo = Math.max(STATE.maxCombo, STATE.combo);
+          const comboBonus = Math.min(STATE.combo, 10);
+          const points = 100 + comboBonus * 20;
+          STATE.score += points;
+          STATE.hits++;
+          STATE.total++;
+
+          showFeedback('hit', `+${points}`);
+          explodeShape(entry);
+        } else {
+          // Wrong — hit a distractor
+          STATE.combo = 0;
+          STATE.score = Math.max(0, STATE.score - 50);
+          STATE.wrong++;
+          STATE.total++;
+
+          showFeedback('wrong', '-50');
+          explodeShape(entry);
+        }
+      }
+
+      updateHUD();
+    }
+
+    canvas.addEventListener('click', onCanvasClick);
+
+    // ── Feedback display ──
+    const feedbackEl = document.getElementById('feedback');
+    let feedbackTimeout;
+
+    function showFeedback(type, text) {
+      feedbackEl.className = type;
+      feedbackEl.textContent = text;
+      clearTimeout(feedbackTimeout);
+      feedbackTimeout = setTimeout(() => {
+        feedbackEl.className = '';
+        feedbackEl.style.opacity = '0';
+      }, 400);
+    }
+
+    // Brief red screen-edge flash when a shape reaches the player's lane.
+    const hitFlashEl = document.getElementById('hit-flash');
+    let hitFlashTimeout;
+    function flashHit() {
+      if (!hitFlashEl) return;
+      hitFlashEl.classList.add('active');
+      clearTimeout(hitFlashTimeout);
+      hitFlashTimeout = setTimeout(() => {
+        hitFlashEl.classList.remove('active');
+      }, 180);
+    }
+
+    // ── HUD update ──
+    function updateHUD() {
+      document.getElementById('score-display').textContent = STATE.score;
+
+      const comboEl = document.getElementById('combo-display');
+      if (STATE.combo > 1) {
+        comboEl.textContent = `${STATE.combo}x Combo`;
+      } else {
+        comboEl.textContent = '';
+      }
+
+      const accuracy = STATE.total > 0 ? Math.round(STATE.hits / STATE.total * 100) : 0;
+      document.getElementById('stats-display').textContent =
+        `${STATE.hits} hits / ${STATE.total} attempts · ${accuracy}%`;
+      document.getElementById('speed-indicator').textContent =
+        `Speed: ${STATE.speed.toFixed(1)}x`;
+    }
+
+    // ── Game loop ──
+    function gameLoop() {
+      if (!STATE.running) return;
+      requestAnimationFrame(gameLoop);
+
+      const dt = STATE.clock.getDelta();
+
+      // Spawn shapes
+      spawnTimer -= dt;
+      if (spawnTimer <= 0 && STATE.shapeQueue.length > 0) {
+        const shape = STATE.shapeQueue.shift();
+        spawnShape(shape);
+        spawnTimer = BASE_SPAWN_INTERVAL / STATE.speed;
+
+        // Fetch more when queue is low
+        if (STATE.shapeQueue.length < 6) {
+          fetchBatch();
+        }
+      }
+
+      // Move shapes forward
+      const moveSpeed = 12 * STATE.speed;
+      for (const entry of STATE.activeShapes) {
+        if (entry.hit) continue;
+        entry.z += moveSpeed * dt;
+        entry.mesh.position.z = entry.z;
+
+        // Shape rotation while moving (player-controlled speed)
+        entry.mesh.rotation.y += 0.4 * rotSpeed * dt;
+        entry.mesh.rotation.x += 0.2 * rotSpeed * dt;
+
+        // Glow when in hit zone
+        const inHitZone = entry.z > HIT_ZONE_Z - HIT_ZONE_DEPTH && entry.z < HIT_ZONE_Z + HIT_ZONE_DEPTH;
+        if (inHitZone && !entry.glowing) {
+          entry.glowing = true;
+          entry.mesh.children.forEach(c => {
+            if (c.material) c.material.emissiveIntensity = 0.5;
+          });
+        } else if (!inHitZone && entry.glowing) {
+          entry.glowing = false;
+          entry.mesh.children.forEach(c => {
+            if (c.material) c.material.emissiveIntensity = 0.15;
+          });
+        }
+
+        // Past the player — apply the lane-aware penalty ladder.
+        //
+        // Summary of penalties when an un-slashed shape crosses KILL_Z:
+        //   Target in another lane   (dodged but not slashed): -50
+        //   Distractor in player's lane (you didn't dodge)   : -75
+        //   Target in player's lane  (missed AND collided)   : -125
+        //   Distractor in another lane (correctly avoided)   :   0 (silent)
+        //
+        // Clicking a distractor anywhere is still -50 (handled in the
+        // raycaster branch); this block only fires when a shape ages out.
+        if (entry.z > KILL_Z) {
+          entry.hit = true;
+          scene.remove(entry.mesh);
+
+          const inPlayerLane = entry.laneIdx === STATE.playerLane;
+          const isTarget = !!entry.data.is_target;
+
+          if (isTarget && inPlayerLane) {
+            // Worst case: missed the slash AND failed to dodge.
+            STATE.combo = 0;
+            STATE.score = Math.max(0, STATE.score - 125);
+            STATE.misses++;
+            STATE.total++;
+            flashHit();
+            showFeedback('hit-player', 'HIT -125');
+          } else if (isTarget && !inPlayerLane) {
+            // Dodged but failed to slash.
+            STATE.combo = 0;
+            STATE.score = Math.max(0, STATE.score - 50);
+            STATE.misses++;
+            STATE.total++;
+            showFeedback('miss', 'MISS -50');
+          } else if (!isTarget && inPlayerLane) {
+            // Distractor reached you because you didn't dodge.
+            STATE.combo = 0;
+            STATE.score = Math.max(0, STATE.score - 75);
+            STATE.wrong++;
+            STATE.total++;
+            flashHit();
+            showFeedback('hit-player', 'HIT -75');
+          }
+          // else: distractor correctly avoided in another lane — no-op.
+          updateHUD();
+        }
+      }
+
+      // Clean up hit shapes
+      STATE.activeShapes = STATE.activeShapes.filter(s => !s.hit || s.mesh.parent);
+      STATE.activeShapes = STATE.activeShapes.filter(s => {
+        if (s.hit) {
+          if (s.mesh.parent) scene.remove(s.mesh);
+          return false;
+        }
+        return true;
+      });
+
+      // Player lane movement (smooth lerp)
+      const targetX = LANES[STATE.playerLane];
+      STATE.playerX += (targetX - STATE.playerX) * Math.min(1, LANE_MOVE_SPEED * dt);
+      camera.position.x = STATE.playerX;
+
+      // Difficulty ramping: speed up every 10 correct hits
+      const baseSpeed = startSpeed;
+      const targetSpeed = baseSpeed + Math.floor(STATE.hits / 10) * 0.15;
+      STATE.speed += (targetSpeed - STATE.speed) * 0.02;
+
+      // Beat-synced visual pulse
+      updateBeatPulse();
+
+      // Pulse hit zone on beat
+      const basePulse = 0.3 + Math.sin(performance.now() / 300) * 0.1;
+      hitZoneMat.opacity = basePulse + beatPulse * 0.5;
+      hitZoneMat.color.setHSL(0.45 - beatPulse * 0.12, 1, 0.5 + beatPulse * 0.2);
+
+      // Pulse lane lines on beat
+      for (const mat of laneLineMaterials) {
+        mat.opacity = 0.2 + beatPulse * 0.5;
+      }
+
+      // Pulse floor brightness on beat
+      floorMat.emissive = new THREE.Color(0x00ccff);
+      floorMat.emissiveIntensity = beatPulse * 0.08;
+
+      // Pulse point lights on beat
+      blueLight.intensity = 1.5 + beatPulse * 2;
+      pinkLight.intensity = 1.0 + beatPulse * 1.5;
+
+      // Update saber trails
+      updateSaberTrails(dt);
+
+      // Render
+      renderer.render(scene, camera);
+    }
+
+    // ── Start / Game over ──
+    window.startGame = async function() {
+      // Reset state
+      STATE.score = 0;
+      STATE.combo = 0;
+      STATE.maxCombo = 0;
+      STATE.hits = 0;
+      STATE.misses = 0;
+      STATE.wrong = 0;
+      STATE.total = 0;
+      STATE.speed = startSpeed;
+      STATE.shapeQueue = [];
+      STATE.activeShapes.forEach(s => scene.remove(s.mesh));
+      STATE.activeShapes = [];
+      STATE.batchPending = false;
+      STATE.playerLane = 1;
+      STATE.playerX = LANES[1];
+      camera.position.x = LANES[1];
+      spawnTimer = 0;
+
+      document.getElementById('overlay-screen').style.display = 'none';
+      updateHUD();
+
+      // Load and start audio
+      await loadAudio();
+
+      // Fetch initial batch
+      await fetchBatch();
+
+      startAudio();
+      STATE.running = true;
+      STATE.clock.start();
+      gameLoop();
+    };
+
+    function showGameOver() {
+      STATE.running = false;
+      stopAudio();
+
+      const overlay = document.getElementById('overlay-screen');
+      const accuracy = STATE.total > 0 ? Math.round(STATE.hits / STATE.total * 100) : 0;
+
+      overlay.innerHTML = `
+        <h1>Round Complete</h1>
+        <div class="final-score">${STATE.score}</div>
+        <div class="final-stats">
+          ${STATE.hits} hits · ${STATE.misses} missed · ${STATE.wrong} wrong<br>
+          Accuracy: ${accuracy}% · Max Combo: ${STATE.maxCombo}x
+        </div>
+        <button onclick="startGame()">Play Again</button>
+        <button onclick="window.location.href='/'">Back to MindFold 3D</button>
+      `;
+      overlay.style.display = 'flex';
+    }
+
+    // End round after all shapes processed and queue empty
+    function checkRoundEnd() {
+      if (STATE.running && STATE.shapeQueue.length === 0 &&
+          STATE.activeShapes.length === 0 && !STATE.batchPending) {
+        // Give a brief pause then end
+        setTimeout(() => {
+          if (STATE.activeShapes.length === 0 && STATE.shapeQueue.length === 0) {
+            showGameOver();
+          }
+        }, 1500);
+      }
+    }
+
+    // Check periodically
+    setInterval(checkRoundEnd, 1000);
+
+    // ── Resize handling ──
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      saberCanvas.width = window.innerWidth;
+      saberCanvas.height = window.innerHeight;
+    });
+
+    // ── Initial render (static corridor while on start screen) ──
+    function renderIdle() {
+      if (STATE.running) return;
+      requestAnimationFrame(renderIdle);
+      const time = performance.now() / 1000;
+      hitZoneMat.opacity = 0.3 + Math.sin(time * 2) * 0.15;
+      renderer.render(scene, camera);
+    }
+    renderIdle();
+
+    // ── Lane movement (shared by keyboard, buttons, and swipe) ──
+    function moveLaneLeft() {
+      if (!STATE.running) return;
+      if (STATE.playerLane > 0) STATE.playerLane--;
+    }
+    function moveLaneRight() {
+      if (!STATE.running) return;
+      if (STATE.playerLane < LANES.length - 1) STATE.playerLane++;
+    }
+
+    // ── On-screen lane buttons (touch + mouse) ──
+    const laneLeftBtn = document.getElementById('lane-left-btn');
+    const laneRightBtn = document.getElementById('lane-right-btn');
+    function bindLaneButton(btn, handler) {
+      if (!btn) return;
+      // pointerdown fires immediately on touch without waiting for click
+      // synthesis (which has ~300 ms tap delay on some browsers). After a
+      // pointerdown fires, browsers still synthesize a click, so we must
+      // suppress it - otherwise a single tap fires the handler twice and
+      // the player skips the middle lane entirely.
+      let handledByPointer = false;
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        handledByPointer = true;
+        handler();
+      });
+      // Fallback for browsers that don't dispatch pointer events.
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (handledByPointer) {
+          handledByPointer = false;
+          return;
+        }
+        handler();
+      });
+    }
+    bindLaneButton(laneLeftBtn, moveLaneLeft);
+    bindLaneButton(laneRightBtn, moveLaneRight);
+
+    // ── Swipe-to-change-lane on the game canvas ──
+    // A short horizontal flick switches lanes without needing the buttons.
+    // Short taps still fall through to the slash handler (onCanvasClick).
+    (function bindSwipe() {
+      let startX = 0, startY = 0, startT = 0, active = false;
+      const SWIPE_MIN_DX = 40;  // pixels
+      const SWIPE_MAX_DY = 50;  // stay mostly horizontal
+      const SWIPE_MAX_MS = 500;
+      canvas.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return; // mouse stays click-only
+        active = true;
+        startX = e.clientX; startY = e.clientY; startT = performance.now();
+      });
+      canvas.addEventListener('pointerup', (e) => {
+        if (!active || e.pointerType !== 'touch') { active = false; return; }
+        active = false;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const dt = performance.now() - startT;
+        if (dt > SWIPE_MAX_MS) return;
+        if (Math.abs(dy) > SWIPE_MAX_DY) return;
+        if (Math.abs(dx) < SWIPE_MIN_DX) return;
+        if (dx < 0) moveLaneLeft(); else moveLaneRight();
+      });
+      canvas.addEventListener('pointercancel', () => { active = false; });
+    })();
+
+    // ── Keyboard controls ──
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !STATE.running) {
+        e.preventDefault();
+        startGame();
+        return;
+      }
+
+      if (!STATE.running) return;
+
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+        moveLaneLeft();
+      }
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+        moveLaneRight();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -2231,6 +2231,178 @@ def repair_feature_data(current_user: models.User = Depends(auth.get_current_act
     
     return result
 
+# ── Rhythm Mode endpoint ──────────────────────────────────────────────────────
+
+class RhythmShapeResponse(BaseModel):
+    """A single shape in the rhythm stream."""
+    id: str
+    voxels: List[List[int]]
+    grid_size: List[int]
+    is_target: bool  # True = match the target (player should hit)
+    features: Optional[dict] = None
+
+class RhythmBatch(BaseModel):
+    """Target + a queue of incoming shapes for the rhythm game."""
+    target: ShapeResponse
+    stream: List[RhythmShapeResponse]
+    cognitive_profile: Optional[dict] = None
+
+@app.get("/get-rhythm-batch", response_model=RhythmBatch)
+def get_rhythm_batch(
+    batch_size: int = 12,
+    target_ratio: float = 0.4,
+    generation_mode: str = "skeleton",
+    expert_mode: bool = False,
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """Generate a target shape and a stream of incoming shapes (mix of
+    rotated targets and distractors) for the rhythm game mode."""
+    print(f"\n=== Rhythm Batch Request ===")
+    print(f"User: {current_user.username}, batch_size={batch_size}, target_ratio={target_ratio}")
+
+    try:
+        # 1. Difficulty selection
+        if expert_mode:
+            difficulty_levels = ["high", "expert"]
+            target_voxel_count = random.randint(15, 25)
+        else:
+            difficulty_levels = ["low", "medium", "high"]
+            target_voxel_count = random.randint(8, 12)
+
+        shape_difficulties = {
+            dim: random.choice(difficulty_levels) for dim in SHAPE_DIMENSIONS
+        }
+        task_difficulties = {
+            dim: random.choice(["low", "medium", "high"]) for dim in TASK_DIMENSIONS
+        }
+        task_difficulties["mirror_discrimination"] = "low"
+        task_difficulties["configural_binding"] = "low"
+        task_difficulties["perspective_taking"] = "low"
+
+        # 2. Generate the target shape
+        spec = get_difficulty_spec(
+            shape_difficulties, task_difficulties,
+            target_voxel_count=target_voxel_count
+        )
+        base_target_sfs = spec.shape_features
+        base_target_sfs.number_of_components = 1
+
+        if generation_mode == "skeleton":
+            skeleton_spec = get_skeleton_spec(shape_difficulties, task_difficulties, target_voxel_count)
+            target_shape_data = generate_shape_skeleton(skeleton_spec)
+        else:
+            target_shape_data = generate_shape_advanced(base_target_sfs, max_iterations=75 * base_target_sfs.voxel_count)
+
+        target_features_dict = target_shape_data["features"]
+        target_response = ShapeResponse(
+            id=f"rhythm_target_{uuid.uuid4().hex[:6]}",
+            voxels=target_shape_data["voxels"],
+            grid_size=list(target_shape_data["grid_size"]),
+            features=target_features_dict,
+        )
+
+        # 3. Build the stream: mix of target copies (rotated) and distractors
+        num_targets = max(1, int(batch_size * target_ratio))
+        num_distractors = batch_size - num_targets
+        stream: List[RhythmShapeResponse] = []
+
+        # Add rotated copies of target (same voxels — frontend applies random rotation)
+        for i in range(num_targets):
+            stream.append(RhythmShapeResponse(
+                id=f"rhythm_match_{uuid.uuid4().hex[:6]}",
+                voxels=target_shape_data["voxels"],
+                grid_size=list(target_shape_data["grid_size"]),
+                is_target=True,
+                features=target_features_dict,
+            ))
+
+        # Generate distractors at varied tiers
+        canonical_target = canonical_voxel_form(target_shape_data["voxels"])
+        seen = {canonical_target}
+
+        for i in range(num_distractors):
+            tier = random.choice([0, 1, 2])
+            distractor_data = None
+
+            for attempt in range(10):
+                if generation_mode == "skeleton":
+                    d_spec = perturb_skeleton_spec(
+                        get_skeleton_spec(shape_difficulties, task_difficulties, target_voxel_count),
+                        tier
+                    )
+                    # Escalate: swap archetype after repeated failures
+                    if attempt >= 3:
+                        alt_archetypes = [a for a in ("tree", "chiral", "bridge")
+                                          if a != skeleton_spec.archetype]
+                        d_spec.archetype = random.choice(alt_archetypes)
+                    d_data = generate_shape_skeleton(d_spec)
+                else:
+                    d_sfs = perturb_features(base_target_sfs, tier)
+                    d_data = generate_shape_advanced(d_sfs, max_iterations=75 * d_sfs.voxel_count)
+
+                canon = canonical_voxel_form(d_data["voxels"])
+                if canon not in seen and len(d_data["voxels"]) > 0:
+                    seen.add(canon)
+                    distractor_data = d_data
+                    break
+
+            # Fallback: nudge voxels if still duplicate after all attempts
+            if distractor_data is None and d_data is not None and len(d_data["voxels"]) > 0:
+                nudged = nudge_voxels_until_unique(
+                    d_data["voxels"], seen, tuple(d_data["grid_size"])
+                )
+                if nudged is not None:
+                    grid_tuple = tuple(d_data["grid_size"])
+                    nudged_set = {tuple(v) for v in nudged}
+                    new_sfs = analyze_shape_features(nudged_set, grid_tuple)
+                    d_data["voxels"] = nudged
+                    d_data["features"] = new_sfs.model_dump(exclude_none=True)
+                    seen.add(canonical_voxel_form(nudged))
+                    distractor_data = d_data
+
+            if distractor_data:
+                stream.append(RhythmShapeResponse(
+                    id=f"rhythm_dist_{uuid.uuid4().hex[:6]}",
+                    voxels=distractor_data["voxels"],
+                    grid_size=list(distractor_data["grid_size"]),
+                    is_target=False,
+                    features=distractor_data["features"],
+                ))
+
+        # Shuffle stream order
+        random.shuffle(stream)
+
+        # Cognitive profile
+        valid_keys = ShapeFeatureSet.model_fields.keys()
+        target_sfs = ShapeFeatureSet(**{k: v for k, v in target_features_dict.items() if k in valid_keys and v is not None})
+        verified_profile = reverse_map_cognitive_profile(target_sfs, shape_difficulties)
+        cognitive_profile_data = {
+            "intended": {"shape_difficulties": shape_difficulties},
+            "verified": cognitive_profile_to_dict(verified_profile),
+        }
+
+        print(f"Rhythm batch: {num_targets} targets + {len(stream) - num_targets} distractors")
+        return RhythmBatch(
+            target=target_response,
+            stream=stream,
+            cognitive_profile=cognitive_profile_data,
+        )
+
+    except Exception as e:
+        print(f"Error generating rhythm batch: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+@app.get("/rhythm")
+def serve_rhythm(request: Request):
+    return _serve_html_with_meta(
+        "static/rhythm.html", request,
+        title="MindFold 3D – Rhythm Mode",
+        description="Play MindFold 3D's rhythm mode: match shapes to the "
+                    "beat and train your spatial reasoning.",
+    )
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":

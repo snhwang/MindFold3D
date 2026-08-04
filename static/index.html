@@ -1078,6 +1078,10 @@
         style="background: #888; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
         title="Structure Builder mode" aria-label="Structure Builder"><i
           class="fas fa-cubes"></i></button>
+      <button id="rhythm-mode-btn" onclick="window.location.href='/rhythm'"
+        style="background: #e84393; color: white; font-weight: bold; padding: 8px 12px; margin-left: 4px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+        title="Rhythm Mode" aria-label="Rhythm Mode"><i
+          class="fas fa-music"></i></button>
       <button id="help-btn" onclick="showInstructions()"
         style="background: #00cc66; color: white; margin-left: 10px; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
         title="Instructions" aria-label="Instructions"><i
@@ -1627,7 +1631,8 @@
       // Check coaching availability
       checkCoachingStatus();
 
-      // Honor ?mode=builder / ?mode=recognition from the URL.
+      // Honor ?mode=builder / ?mode=recognition from the URL (used when
+      // handing off from Rhythm mode's mode switcher, for example).
       // Default (no mode param): recognition mode is the visible default in
       // markup, so flip body.mc-active on too — phone CSS depends on it.
       const _urlMode = new URLSearchParams(window.location.search).get('mode');

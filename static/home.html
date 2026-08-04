@@ -154,6 +154,7 @@
     }
     .mode-card.recognition .icon-wrap { background: #007acc; }
     .mode-card.builder     .icon-wrap { background: #555e6c; }
+    .mode-card.rhythm      .icon-wrap { background: #e84393; }
 
     .mode-card h2 {
       margin: 0;
@@ -314,6 +315,11 @@
         <p>Recreate the target structure by adding and removing cubes one at a time.</p>
       </button>
 
+      <button type="button" class="mode-card rhythm" onclick="goToMode('rhythm')" aria-label="Rhythm mode">
+        <div class="icon-wrap"><i class="fas fa-music"></i></div>
+        <h2>Rhythm Mode</h2>
+        <p>Catch matching shapes as they fly past, in time with the music.</p>
+      </button>
     </div>
 
     <div class="secondary-links">
@@ -340,12 +346,15 @@
     // ---- Mode routing --------------------------------------------------
     // Recognition + Builder live in index.html (selected via ?mode=...
     // query string already supported by index.html's _urlMode handler).
+    // Rhythm is a separate page at /rhythm.
     function goToMode(mode) {
       try {
         localStorage.setItem('mindfold3d-preferred-mode', mode);
       } catch (e) { /* ignore quota errors */ }
 
-      if (mode === 'builder') {
+      if (mode === 'rhythm') {
+        window.location.href = '/rhythm';
+      } else if (mode === 'builder') {
         window.location.href = '/?mode=builder';
       } else {
         // Default: recognition (multiple choice)

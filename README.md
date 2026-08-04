@@ -14,7 +14,7 @@ A computational framework for adaptive spatial cognition assessment and training
 ## Features
 
 - Interactive 3D shape visualization
-- Two game modes: Recognition and Builder
+- Three game modes: Recognition, Builder, and Rhythm
 - Performance scorecard with per-feature cognitive analytics
 - Skeleton-first shape generation with three structural archetypes (tree, chiral, hole). Cyclic shapes are produced by a topology-guaranteed generator: ring templates physically reserve each intended hole and every emitted shape is certified against a direct cubical first-Betti-number (β₁) computation, with acyclic shapes certified β₁ = 0 the same way. Circuit rank μ of the adjacency graph is retained as an internal control quantity and unscored diagnostic — it is distinct from β₁ and never reported under that name.
 - Randomly rotated shapes for increased difficulty
@@ -26,7 +26,7 @@ A computational framework for adaptive spatial cognition assessment and training
 
 ## Game Modes
 
-Switch between modes with the icon buttons in the top navigation: 👁 Recognition, ⬛ Builder. Click the **?** button in any mode for in-app instructions.
+Switch between modes with the icon buttons in the top navigation: 👁 Recognition, ⬛ Builder, 🎵 Rhythm. Click the **?** button in any mode for in-app instructions.
 
 ### Recognition Mode 👁
 
@@ -63,6 +63,19 @@ Switch between modes with the icon buttons in the top navigation: 👁 Recogniti
 6. Click **Reset** (orange) to restart from a single block.
 
 **Tip:** Rotate the workspace view between edits — it's hard to judge depth from a single angle.
+
+### Rhythm Mode 🎵
+
+**Goal:** Slash incoming shapes that match the target; avoid the distractors.
+
+**How to play:**
+1. On the start screen, pick a **Speed** (Relaxed / Moderate / Intense) and **Rotation** level (None / Slow / Medium / Fast) for the incoming shapes.
+2. Press **Start** (or hit **Space**).
+3. A target shape is shown at the top. Shapes stream toward you down a three-lane corridor.
+4. Move your ship between lanes with **A**/**D** or **←**/**→**.
+5. **Click** a shape to slash it. Match the target → +points and combo bonus. Hit a distractor → penalty.
+6. Missing a matching shape (letting it pass) also costs the combo.
+7. The round ends when the batch is exhausted; you can **Play Again** or return to the main app.
 
 ### Performance Scorecard 📊
 
@@ -149,3 +162,4 @@ Sound effects used in this project:
 
 - **Correct answer sound** — courtesy of [Mixkit](https://mixkit.co/) (by Envato) under the [Mixkit Free License](https://mixkit.co/license/#sfxFree). Source: https://assets.mixkit.co/active_storage/sfx/1689/1689-preview.mp3
 - **Level-up sound** — by [Universfield](https://unil.ink/universfield) via [Pixabay](https://pixabay.com/sound-effects/level-up-4-243762/), used under the [Pixabay Content License](https://pixabay.com/service/license-summary/).
+- **Rhythm ascend sound** (`static/audio/ascend.ogg`) — "1_ascend" from the [Free Rhythm Game Music Pack 1](https://opengameart.org/content/free-rhythm-game-music-pack-1) by **tricksntraps** on OpenGameArt.org, released under CC0 (Public Domain). Converted from WAV to OGG for this project.
