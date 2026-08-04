@@ -623,6 +623,7 @@
       activeShapes: [],
       targetData: null,
       batchPending: false,
+      nextBatch: null,
       clock: new THREE.Clock(),
       playerLane: 1,  // 0=left, 1=center, 2=right
       playerX: 0,
@@ -1020,39 +1021,58 @@
     }
 
     // ── Fetch shape batch from backend ──
-    async function fetchBatch() {
-      if (STATE.batchPending) return;
+    // Server-side batch generation takes several seconds on slow hosts
+    // (each distractor is a fresh skeleton generation), so batches are
+    // fetched in the background into STATE.nextBatch and applied only at
+    // a wave boundary. Applying a batch the moment it arrived used to
+    // swap the HUD target while the previous wave's shapes were still
+    // flying, and fetching only after exhaustion left a long gap with no
+    // shapes on screen.
+    async function fetchBatch(batchSize = 12) {
+      if (STATE.batchPending) return null;
       STATE.batchPending = true;
 
       try {
         const res = await fetch(
-          `/get-rhythm-batch?batch_size=12&target_ratio=0.4&generation_mode=skeleton`,
+          `/get-rhythm-batch?batch_size=${batchSize}&target_ratio=0.4&generation_mode=skeleton`,
           { headers: authHeaders() }
         );
 
         if (res.status === 401) {
           alert('Please log in first through the main MindFold3D page.');
           window.location.href = '/';
-          return;
+          return null;
         }
 
-        const data = await res.json();
-        STATE.targetData = data.target;
-
-        // Render target in HUD
-        renderTargetHUD(data.target.voxels, data.target.grid_size);
-
-        // Queue the shapes
-        for (const shape of data.stream) {
-          STATE.shapeQueue.push(shape);
-        }
-
-        console.log(`Fetched batch: ${data.stream.length} shapes queued (total queue: ${STATE.shapeQueue.length})`);
+        return await res.json();
       } catch (err) {
         console.error('Failed to fetch rhythm batch:', err);
+        return null;
       } finally {
         STATE.batchPending = false;
       }
+    }
+
+    function applyBatch(data) {
+      if (!data) return;
+      STATE.targetData = data.target;
+
+      // Render target in HUD
+      renderTargetHUD(data.target.voxels, data.target.grid_size);
+
+      // Queue the shapes
+      for (const shape of data.stream) {
+        STATE.shapeQueue.push(shape);
+      }
+
+      console.log(`Applied batch: ${data.stream.length} shapes queued (total queue: ${STATE.shapeQueue.length})`);
+    }
+
+    function prefetchNextBatch() {
+      if (STATE.nextBatch || STATE.batchPending) return;
+      fetchBatch().then((batch) => {
+        if (batch) STATE.nextBatch = batch;
+      });
     }
 
     // ── Spawn shape into the corridor ──
@@ -1201,6 +1221,12 @@
 
       const dt = STATE.clock.getDelta();
 
+      // Start the next wave the moment the current one is exhausted.
+      if (STATE.shapeQueue.length === 0 && STATE.nextBatch) {
+        applyBatch(STATE.nextBatch);
+        STATE.nextBatch = null;
+      }
+
       // Spawn shapes
       spawnTimer -= dt;
       if (spawnTimer <= 0 && STATE.shapeQueue.length > 0) {
@@ -1208,9 +1234,9 @@
         spawnShape(shape);
         spawnTimer = BASE_SPAWN_INTERVAL / STATE.speed;
 
-        // Fetch more when queue is low
+        // Prefetch the next wave in the background while this one plays
         if (STATE.shapeQueue.length < 6) {
-          fetchBatch();
+          prefetchNextBatch();
         }
       }
 
@@ -1348,24 +1374,31 @@
       STATE.activeShapes.forEach(s => scene.remove(s.mesh));
       STATE.activeShapes = [];
       STATE.batchPending = false;
+      STATE.nextBatch = null;
       STATE.playerLane = 1;
       STATE.playerX = LANES[1];
       camera.position.x = LANES[1];
       spawnTimer = 0;
 
-      document.getElementById('overlay-screen').style.display = 'none';
+      // Keep the overlay up as a loading indicator while the first wave
+      // generates server-side (several seconds on slow hosts).
+      const overlay = document.getElementById('overlay-screen');
+      overlay.innerHTML = '<h1>Generating shapes…</h1>';
+      overlay.style.display = 'flex';
       updateHUD();
 
-      // Load and start audio
-      await loadAudio();
+      // Load audio and a deliberately small first wave in parallel, so
+      // play starts as soon as possible. The full-size next wave is
+      // prefetched in the background once the game is running.
+      const [, firstBatch] = await Promise.all([loadAudio(), fetchBatch(5)]);
+      applyBatch(firstBatch);
 
-      // Fetch initial batch
-      await fetchBatch();
-
+      overlay.style.display = 'none';
       startAudio();
       STATE.running = true;
       STATE.clock.start();
       gameLoop();
+      prefetchNextBatch();
     };
 
     function showGameOver() {
@@ -1391,7 +1424,8 @@
     // End round after all shapes processed and queue empty
     function checkRoundEnd() {
       if (STATE.running && STATE.shapeQueue.length === 0 &&
-          STATE.activeShapes.length === 0 && !STATE.batchPending) {
+          STATE.activeShapes.length === 0 && !STATE.batchPending &&
+          !STATE.nextBatch) {
         // Give a brief pause then end
         setTimeout(() => {
           if (STATE.activeShapes.length === 0 && STATE.shapeQueue.length === 0) {
