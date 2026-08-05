@@ -16,11 +16,12 @@ Key inventive endpoints:
 import copy
 import math
 import random
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import Body, Depends, FastAPI, Request
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Response
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, HTMLResponse
@@ -2247,19 +2248,17 @@ class RhythmBatch(BaseModel):
     stream: List[RhythmShapeResponse]
     cognitive_profile: Optional[dict] = None
 
-@app.get("/get-rhythm-batch", response_model=RhythmBatch)
-def get_rhythm_batch(
+def _build_rhythm_batch(
     batch_size: int = 12,
     target_ratio: float = 0.4,
     generation_mode: str = "skeleton",
     expert_mode: bool = False,
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
+) -> RhythmBatch:
     """Generate a target shape and a stream of incoming shapes (mix of
-    rotated targets and distractors) for the rhythm game mode."""
-    print(f"\n=== Rhythm Batch Request ===")
-    print(f"User: {current_user.username}, batch_size={batch_size}, target_ratio={target_ratio}")
+    rotated targets and distractors) for the rhythm game mode.
 
+    Pure CPU work with no request context, so it can run inline for a
+    request or in a background pool-refill task."""
     try:
         # 1. Difficulty selection
         if expert_mode:
@@ -2393,6 +2392,79 @@ def get_rhythm_batch(
         import traceback
         traceback.print_exc()
         raise
+
+# ── Rhythm batch pregeneration pool ──
+# A full batch takes seconds of pure CPU on small hosts, longer than a
+# short wave lasts, so generating on demand starves the game between
+# waves. The server is idle while a wave plays (gameplay is entirely
+# client-side), so batches for the standard request profile are computed
+# ahead: a request is answered from the pool instantly and a background
+# task refills the pool after the response goes out.
+_RHYTHM_POOL_TARGET = 2
+_RHYTHM_POOL_PROFILE = dict(batch_size=12, target_ratio=0.4,
+                            generation_mode="skeleton", expert_mode=False)
+_rhythm_pool: List[RhythmBatch] = []
+_rhythm_pool_lock = threading.Lock()
+_rhythm_refill_running = False
+
+
+def _refill_rhythm_pool():
+    """Top up the pregenerated batch pool. Only one refill runs at a time."""
+    global _rhythm_refill_running
+    with _rhythm_pool_lock:
+        if _rhythm_refill_running:
+            return
+        _rhythm_refill_running = True
+    try:
+        while True:
+            with _rhythm_pool_lock:
+                if len(_rhythm_pool) >= _RHYTHM_POOL_TARGET:
+                    return
+            batch = _build_rhythm_batch(**_RHYTHM_POOL_PROFILE)
+            with _rhythm_pool_lock:
+                _rhythm_pool.append(batch)
+            print(f"Rhythm pool refilled to {len(_rhythm_pool)}")
+    except Exception as e:
+        print(f"Rhythm pool refill failed: {e}")
+    finally:
+        with _rhythm_pool_lock:
+            _rhythm_refill_running = False
+
+
+# Warm the pool at startup so even the first session's later waves are
+# served instantly. Daemon thread, so it never blocks shutdown.
+threading.Thread(target=_refill_rhythm_pool, daemon=True).start()
+
+
+@app.get("/get-rhythm-batch", response_model=RhythmBatch)
+def get_rhythm_batch(
+    background_tasks: BackgroundTasks,
+    batch_size: int = 12,
+    target_ratio: float = 0.4,
+    generation_mode: str = "skeleton",
+    expert_mode: bool = False,
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """Serve a rhythm batch, preferring the pregenerated pool."""
+    print(f"\n=== Rhythm Batch Request ===")
+    print(f"User: {current_user.username}, batch_size={batch_size}, target_ratio={target_ratio}")
+
+    requested = dict(batch_size=batch_size, target_ratio=target_ratio,
+                     generation_mode=generation_mode, expert_mode=expert_mode)
+    pooled = None
+    if requested == _RHYTHM_POOL_PROFILE:
+        with _rhythm_pool_lock:
+            if _rhythm_pool:
+                pooled = _rhythm_pool.pop(0)
+
+    # Refill (or warm) the pool once this response is out the door.
+    background_tasks.add_task(_refill_rhythm_pool)
+
+    if pooled is not None:
+        print("Rhythm batch served from pregenerated pool")
+        return pooled
+    return _build_rhythm_batch(batch_size, target_ratio,
+                               generation_mode, expert_mode)
 
 @app.get("/rhythm")
 def serve_rhythm(request: Request):
