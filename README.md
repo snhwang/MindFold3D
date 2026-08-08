@@ -85,7 +85,7 @@ Accessible from the User menu. Tracks per-feature success rates across trials to
 
 - FastAPI (Backend)
 - Three.js (3D Graphics)
-- Python 3.10 or 3.11
+- Python 3.10–3.12 (developed on 3.12.3)
 - Modern JavaScript
 - SQLAlchemy (Database ORM)
 - JWT Authentication
