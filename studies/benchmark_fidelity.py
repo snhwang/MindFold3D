@@ -11,11 +11,18 @@ This is an offline characterization tool for publication and patent enablement.
 It does NOT gate individual trials — it characterizes the generator's coverage
 of the difficulty space.
 
+Generation is deterministic: each shape reseeds the RNG from a stable
+string of (base seed, dimension, level, index), so identical results
+regenerate on any platform. The published run uses the default seed 2026:
+
+    python studies/benchmark_fidelity.py --n 200         --json results/benchmark_results_n200_allbetti.json
+
 Usage:
     python benchmark_fidelity.py               # defaults: 50 shapes per cell
     python benchmark_fidelity.py --n 100       # 100 shapes per cell
     python benchmark_fidelity.py --n 20 --json results.json
     python benchmark_fidelity.py --dims spatial_form structural_complexity
+    python benchmark_fidelity.py --seed 7      # alternate deterministic seed
 """
 
 import argparse

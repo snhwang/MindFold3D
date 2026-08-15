@@ -128,6 +128,31 @@ The app reads configuration from environment variables (typically through a `.en
 - **Registration / login** — requires `SECRET_KEY` and the database. Does not require Resend.
 - **Password reset emails** — requires `RESEND_API_KEY` (plus a verified sending domain in Resend).
 
+## Reproducing the Published Results
+
+The studies and figures in the accompanying article regenerate from this
+repository (release tag `paper-v7.1`). All three study drivers are
+deterministic, so identical outputs regenerate on any platform.
+
+```bash
+# Study 1 - tier fidelity (about 20 minutes)
+python studies/benchmark_fidelity.py --n 200     --json results/benchmark_results_n200_allbetti.json
+
+# Study 2 - cost of the topology guarantee (about 1 minute)
+python studies/fidelity_study_hole_tiers.py
+
+# Divergence-analysis corpus and unit suite (about 1 minute)
+python prototypes/cross_validate_corpus.py
+python -m pytest tests/test_cycle_count.py
+```
+
+Study 1 uses `--seed 2026` by default (the published run). The figure
+scripts live in `tools/` (`architecture_diagram.py`, `visualize_shapes.py`,
+`generate_trial_figure.py`); the shape-example figures sample fresh
+representative exemplars per run by design. On Windows, set
+`PYTHONIOENCODING=utf-8` so the console accepts the Greek symbols in the
+reports.
+
 ## Authentication
 
 The app includes a complete authentication system:
