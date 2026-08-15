@@ -1,5 +1,5 @@
 
-MindFold 3D — Generation Fidelity Benchmark
+MindFold 3D â€” Generation Fidelity Benchmark
 Dimensions: ['spatial_form', 'structural_complexity', 'spatial_scale']
 Shapes per cell: 200
 Total shapes: 2400
@@ -16,15 +16,15 @@ Total shapes: 2400
   Generating 200 shapes: spatial_scale=medium... 200 ok
   Generating 200 shapes: spatial_scale=high... 200 ok
   Generating 200 shapes: spatial_scale=expert... 200 ok
-  Full results written to: benchmark_results_n200_allbetti.json
+  Full results written to: results/benchmark_results_n200_allbetti.json
 
 
 ==============================================================================
-  MINDFOLD 3D — GENERATION FIDELITY CHARACTERIZATION
+  MINDFOLD 3D â€” GENERATION FIDELITY CHARACTERIZATION
   N = 200 shapes per difficulty cell
-  Date: 2026-07-30T16:18:39.995323
+  Date: 2026-08-15T10:08:31.578568
   Total shapes: 2400
-  Total time: 1267.5s
+  Total time: 774.3s
 ==============================================================================
 
 ------------------------------------------------------------------------------
@@ -38,25 +38,25 @@ Total shapes: 2400
   ------------ ---------- ----------------  ----------------------------------------
   low              100.0%  [98.1%, 100.0%]  low:100.0%
   medium           100.0%  [98.1%, 100.0%]  medium:100.0%
-  high              99.5%   [97.2%, 99.9%]  high:99.5%  mixed:0.5%
+  high              98.5%   [95.7%, 99.5%]  high:98.5%  mixed:1.5%
   expert            99.0%   [96.4%, 99.7%]  expert:99.0%  mixed:1.0%
 
   Feature: anisotropy_index
   Defined ranges: low:[0.0,0.4]  medium:[0.45,0.65]  high:[0.65,0.82]  expert:[0.85,0.99]
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
-  low              0.3464     0.0175     0.3225     0.3696    200
-  medium           0.5927     0.0429     0.4560     0.6464    200
-  high             0.7816     0.0329     0.6547     0.8199    200
-  expert           0.9808     0.0111     0.9273     0.9900    200
+  low              0.3477     0.0174     0.3225     0.3696    200
+  medium           0.5927     0.0386     0.4582     0.6457    200
+  high             0.7823     0.0326     0.6606     0.8199    200
+  expert           0.9818     0.0124     0.9029     0.9916    200
 
   Feature: symmetry_score
   Defined ranges: low:[0.7,1.0]  medium:[0.46,0.7]  high:[0.1,0.46]  expert:[0.0,0.2]
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
-  low              0.8791     0.0677     0.7273     0.9091    200
-  medium           0.6032     0.0439     0.5455     0.6364    200
-  high             0.4055     0.0481     0.1818     0.4545    200
+  low              0.8764     0.0700     0.7273     0.9091    200
+  medium           0.5977     0.0451     0.5455     0.6364    200
+  high             0.3941     0.0510     0.1818     0.4545    200
   expert           0.1827     0.0091     0.1818     0.2727    200
 
 
@@ -71,21 +71,21 @@ Total shapes: 2400
   ------------ ---------- ----------------  ----------------------------------------
   low              100.0%  [98.1%, 100.0%]  low:100.0%
   medium           100.0%  [98.1%, 100.0%]  medium:100.0%
-  high              92.0%   [87.4%, 95.0%]  high:92.0%  medium:8.0%
+  high              96.0%   [92.3%, 98.0%]  high:96.0%  medium:4.0%
   expert           100.0%  [98.1%, 100.0%]  expert:100.0%
 
   Feature: branching_factor
   Defined ranges: low:[0,1]  medium:[2,3]  high:[4,5]  expert:[6,10]
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
   low              0.9750     0.1565     0.0000     1.0000    200
-  medium           2.0200     0.1404     2.0000     3.0000    200
-  high             4.5300     0.6412     3.0000     5.0000    200
+  medium           2.0050     0.1227     1.0000     3.0000    200
+  high             4.6400     0.5585     3.0000     5.0000    200
   expert           9.0000     0.0000     9.0000     9.0000    200
 
   Feature: number_of_components
   Defined ranges: low:1  medium:1  high:[2,3]  expert:[2,4]
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
   low              1.0000     0.0000     1.0000     1.0000    200
   medium           1.0000     0.0000     1.0000     1.0000    200
@@ -94,7 +94,7 @@ Total shapes: 2400
 
   Feature: betti_1
   Defined ranges: low:0  medium:1  high:[2,3]  expert:4
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
   low              0.0000     0.0000     0.0000     0.0000    200
   medium           1.0000     0.0000     1.0000     1.0000    200
@@ -118,7 +118,7 @@ Total shapes: 2400
 
   Feature: voxel_count
   Defined ranges: low:[5,8]  medium:[9,13]  high:[14,18]  expert:[19,25]
-  Intended           Mean       ±Std        Min        Max      N
+  Intended           Mean       Â±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
   low              7.0000     0.0000     7.0000     7.0000    200
   medium          11.0000     0.0000    11.0000    11.0000    200
@@ -128,9 +128,9 @@ Total shapes: 2400
 ------------------------------------------------------------------------------
   OVERALL SUMMARY
 ------------------------------------------------------------------------------
-  spatial_form                  mean fidelity: 99.6%  range: 99.0%–100.0%
-  structural_complexity         mean fidelity: 98.0%  range: 92.0%–100.0%
-  spatial_scale                 mean fidelity: 100.0%  range: 100.0%–100.0%
+  spatial_form                  mean fidelity: 99.4%  range: 98.5%â€“100.0%
+  structural_complexity         mean fidelity: 99.0%  range: 96.0%â€“100.0%
+  spatial_scale                 mean fidelity: 100.0%  range: 100.0%â€“100.0%
 
-  Overall (all dimensions)      mean fidelity: 99.2%  range: 92.0%–100.0%
+  Overall (all dimensions)      mean fidelity: 99.5%  range: 96.0%â€“100.0%
 
