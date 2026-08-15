@@ -23,6 +23,7 @@ import datetime
 import json
 import math
 import statistics
+import random
 import sys
 import time
 from collections import defaultdict
@@ -57,7 +58,7 @@ ALL_DIMS = list(SHAPE_DIMENSIONS.keys())
 # Core benchmark logic
 # ---------------------------------------------------------------------------
 
-def _generate_and_measure(dim_name: str, level: str, n: int) -> List[Dict]:
+def _generate_and_measure(dim_name: str, level: str, n: int, base_seed: int) -> List[Dict]:
     """Generate n shapes targeting (dim_name=level), measure all features.
 
     Held-dimension baseline: medium, EXCEPT structural_complexity, which is
@@ -72,7 +73,11 @@ def _generate_and_measure(dim_name: str, level: str, n: int) -> List[Dict]:
     shape_difficulties["structural_complexity"] = "low"
     shape_difficulties[dim_name] = level
 
-    for _ in range(n):
+    for i in range(n):
+        # Deterministic per-shape seed, independent of execution order and
+        # of which dimension subset is run: identical results regenerate on
+        # any platform (Python's Mersenne Twister is platform-stable).
+        random.seed(f"benchmark|{base_seed}|{dim_name}|{level}|{i}")
         try:
             spec = get_skeleton_spec(
                 shape_difficulties=shape_difficulties,
@@ -159,6 +164,7 @@ def _fidelity_rate(results: List[Dict], dim_name: str, intended_level: str) -> D
 def run_benchmark(
     dims: List[str],
     n_per_cell: int,
+    base_seed: int,
 ) -> Dict:
     """Run full benchmark across specified dimensions and all levels."""
     all_results = {}
@@ -173,7 +179,7 @@ def run_benchmark(
 
         for level in LEVELS:
             print(f"  Generating {n_per_cell} shapes: {dim_name}={level}...", end=" ", flush=True)
-            results = _generate_and_measure(dim_name, level, n_per_cell)
+            results = _generate_and_measure(dim_name, level, n_per_cell, base_seed)
             successes = [r for r in results if "error" not in r]
             errors = len(results) - len(successes)
             print(f"{len(successes)} ok{f', {errors} errors' if errors else ''}")
@@ -333,6 +339,10 @@ def main():
         help=f"Dimensions to benchmark (default: all). Choices: {ALL_DIMS}"
     )
     parser.add_argument(
+        "--seed", type=int, default=2026,
+        help="Base seed for deterministic generation (default: 2026)"
+    )
+    parser.add_argument(
         "--json", type=str, default=None,
         help="Path to write full results as JSON (optional)"
     )
@@ -349,12 +359,13 @@ def main():
     print(f"Total shapes: {total_shapes}\n")
 
     start_time = time.time()
-    results = run_benchmark(dims=args.dims, n_per_cell=args.n)
+    results = run_benchmark(dims=args.dims, n_per_cell=args.n, base_seed=args.seed)
     elapsed = round(time.time() - start_time, 1)
 
     run_metadata = {
         "date": datetime.datetime.now().isoformat(),
         "n_per_cell": args.n,
+        "base_seed": args.seed,
         "dimensions": args.dims,
         "levels": LEVELS,
         "total_shapes": total_shapes,
