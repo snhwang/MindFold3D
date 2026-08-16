@@ -131,11 +131,11 @@ The app reads configuration from environment variables (typically through a `.en
 ## Reproducing the Published Results
 
 The studies and figures in the accompanying article regenerate from this
-repository (release tag `paper-v7.1`). All three study drivers are
+repository (release tag `paper-v8`). All three study drivers are
 deterministic, so identical outputs regenerate on any platform.
 
 ```bash
-# Study 1 - tier fidelity (about 20 minutes)
+# Study 1 - tier fidelity (about 15 minutes)
 python studies/benchmark_fidelity.py --n 200     --json results/benchmark_results_n200_allbetti.json
 
 # Study 2 - cost of the topology guarantee (about 1 minute)
@@ -145,6 +145,13 @@ python studies/fidelity_study_hole_tiers.py
 python prototypes/cross_validate_corpus.py
 python -m pytest tests/test_cycle_count.py
 ```
+
+Expected headline outputs: Study 1 reports 99.7% overall tier fidelity
+across 2,400 shapes with cubical beta-1 exact in every shape. Study 2
+reports first-pass acceptance between 92% and 100% across its 13
+(beta-1, voxel count) cells, all 200/200 certified. The committed files
+in `results/` are the published runs, byte-comparable to a fresh
+regeneration.
 
 Study 1 uses `--seed 2026` by default (the published run). The figure
 scripts live in `tools/` (`architecture_diagram.py`, `visualize_shapes.py`,

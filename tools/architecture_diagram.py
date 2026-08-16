@@ -32,7 +32,8 @@ BOX_H2 = 0.045          # two-line box height
 BOX_PAD = "round,pad=0.003"  # minimal internal padding
 
 
-def rbox(ax, x, y, w, h, text, color, text_color="white", alpha=0.9):
+def rbox(ax, x, y, w, h, text, color, text_color="white", alpha=0.9,
+         fs=None):
     """Draw a rounded rectangle with centered text."""
     ax.add_patch(FancyBboxPatch(
         (x, y), w, h, boxstyle=BOX_PAD,
@@ -40,7 +41,8 @@ def rbox(ax, x, y, w, h, text, color, text_color="white", alpha=0.9):
     ))
     ax.text(x + w / 2, y + h / 2, text,
             ha="center", va="center",
-            fontsize=BOX_FS, color=text_color, zorder=3)
+            fontsize=fs if fs is not None else BOX_FS,
+            color=text_color, zorder=3)
 
 
 def arr(ax, x1, y1, x2, y2, color=C_ARROW, lw=1.5, cs="arc3,rad=0"):
@@ -120,24 +122,35 @@ def main():
     rbox(ax, 0.44, 0.93, 0.34, BOX_H,
          "Forward Mapping (cognitive → skeleton)", C_MAP)
 
-    rbox(ax, 0.44, 0.87, 0.10, BOX_H, "Tree", C_GEN)
-    rbox(ax, 0.56, 0.87, 0.10, BOX_H, "Chiral", C_GEN)
-    rbox(ax, 0.68, 0.87, 0.10, BOX_H, "Hole", C_GEN)
+    rbox(ax, 0.44, 0.875, 0.10, BOX_H, "Tree", C_GEN)
+    rbox(ax, 0.56, 0.875, 0.10, BOX_H, "Chiral", C_GEN)
+    rbox(ax, 0.68, 0.875, 0.10, BOX_H, "Hole", C_GEN)
 
-    rbox(ax, 0.44, 0.81, 0.34, BOX_H,
+    rbox(ax, 0.44, 0.82, 0.34, BOX_H,
          "Generated 3D Voxel Shape", C_GEN)
 
-    rbox(ax, 0.44, 0.735, 0.34, BOX_H2,
+    rbox(ax, 0.44, 0.745, 0.34, BOX_H2,
+         "Validation\n(certify β₁ + branching; regenerate on miss)", C_GEN,
+         fs=BOX_FS - 1.5)
+
+    rbox(ax, 0.44, 0.67, 0.34, BOX_H2,
          "Feature Measurement\n(ground-truth vector)", "#455A64")
 
-    rbox(ax, 0.44, 0.66, 0.34, BOX_H2,
+    rbox(ax, 0.44, 0.595, 0.34, BOX_H2,
          "Reverse Mapping\n(features → cognitive tiers)", C_MAP)
 
     # Arrows in pipeline (snap to box edges with uniform 0.03 gaps)
-    arr(ax, 0.61, 0.93, 0.61, 0.90)
-    arr(ax, 0.61, 0.87, 0.61, 0.84)
-    arr(ax, 0.61, 0.81, 0.61, 0.78)
-    arr(ax, 0.61, 0.735, 0.61, 0.705)
+    arr(ax, 0.61, 0.93, 0.61, 0.905)
+    arr(ax, 0.61, 0.875, 0.61, 0.85)
+    arr(ax, 0.61, 0.82, 0.61, 0.79)
+    arr(ax, 0.61, 0.745, 0.61, 0.715)
+    arr(ax, 0.61, 0.67, 0.61, 0.64)
+
+    # Validation miss → regenerate (back to the archetype templates)
+    arr(ax, 0.44, 0.7675, 0.47, 0.875, color=C_GEN, lw=1.2,
+        cs="arc3,rad=0.35")
+    ax.text(0.425, 0.845, "miss", fontsize=BOX_FS - 2, color=C_GEN,
+            ha="right", style="italic")
 
     # Spec → forward mapping
     arr(ax, 0.38, 0.94, 0.44, 0.94)
@@ -153,11 +166,11 @@ def main():
     rbox(ax, 0.86, 0.75, 0.34, BOX_H, "Scoring uses measured features", "#455A64")
 
     # Reverse map → Profile (center-y of Profile = 0.945)
-    arr(ax, 0.78, 0.6825, 0.86, 0.945, color=C_MAP, lw=1.5)
+    arr(ax, 0.78, 0.6175, 0.86, 0.945, color=C_MAP, lw=1.5)
     # Profile → Fidelity
     arr(ax, 1.03, 0.93, 1.03, 0.90)
     # Measurement → Ground-Truth (center-y of Ground-Truth = 0.825)
-    arr(ax, 0.78, 0.7575, 0.86, 0.825, color="#455A64", lw=1.5, cs="arc3,rad=-0.1")
+    arr(ax, 0.78, 0.6925, 0.86, 0.825, color="#455A64", lw=1.5, cs="arc3,rad=-0.1")
     # Ground-Truth → Scoring
     arr(ax, 1.03, 0.81, 1.03, 0.78)
 
@@ -174,11 +187,11 @@ def main():
     rbox(ax, 0.04, 0.30, 0.34, BOX_H2,
          "Layer 3: Behavioral Metrics\n(RT, accuracy, rotation)", C_LAYER3)
     rbox(ax, 0.42, 0.30, 0.34, BOX_H2,
-         "Performance Data\n(per-trial, per-skill)", C_LAYER3)
+         "Performance Data\n(per-trial, per-feature)", C_LAYER3)
 
     # Pipeline → 3D Presentation (shape + distractors generated together)
-    arr(ax, 0.61, 0.66, 0.61, 0.465, color=C_GEN, lw=1.5)
-    ax.text(0.625, 0.56, "shape +\ndistractors", fontsize=BOX_FS,
+    arr(ax, 0.61, 0.595, 0.61, 0.465, color=C_GEN, lw=1.5)
+    ax.text(0.625, 0.525, "shape +\ndistractors", fontsize=BOX_FS,
             color=C_TEXT)
 
     # Layer 2 (top section) → Task Presentation
@@ -195,31 +208,32 @@ def main():
     arr(ax, 0.38, 0.32, 0.42, 0.32)
 
     # =========================================================
-    # BOTTOM RIGHT: LLM Coaching & Adaptive Loop
+    # BOTTOM RIGHT: Adaptive Loop & Optional Coaching
     # =========================================================
-    sbg(ax, 0.84, 0.05, 0.38, 0.47, "LLM Coaching & Adaptive Loop", C_LLM)
+    sbg(ax, 0.84, 0.05, 0.38, 0.47, "Adaptive Loop & Optional Coaching", C_LLM)
 
-    rbox(ax, 0.86, 0.32, 0.34, 0.14,
-         "LLM Coaching Layer\n"
-         "Cross-dimensional diagnostic synthesis\n"
-         "Strategy & adaptive sequencing",
-         C_LLM)
-    rbox(ax, 0.86, 0.235, 0.34, BOX_H2,
-         "Difficulty Adjustment\n(skill-targeted adaptation)", C_LLM)
-    rbox(ax, 0.86, 0.165, 0.34, BOX_H,
+    rbox(ax, 0.86, 0.40, 0.34, BOX_H2,
+         "Difficulty Adjustment\n(deterministic, per-feature)", C_LLM)
+    rbox(ax, 0.86, 0.33, 0.34, BOX_H,
          "Updated Cognitive Specification", C_MAP)
-    rbox(ax, 0.86, 0.095, 0.34, BOX_H,
+    rbox(ax, 0.86, 0.26, 0.34, BOX_H,
          "Next Trial → Generation Pipeline", C_GEN)
+    rbox(ax, 0.86, 0.09, 0.34, 0.10,
+         "Optional LLM Coaching\n"
+         "advisory feedback to the player;\n"
+         "never affects difficulty or scoring",
+         C_LLM, alpha=0.7)
 
-    # Performance Data → LLM Coaching
-    arr(ax, 0.76, 0.32, 0.86, 0.39,
+    # Performance Data → Difficulty Adjustment (the deterministic loop)
+    arr(ax, 0.76, 0.33, 0.86, 0.4225,
         color=C_LLM, lw=1.5, cs="arc3,rad=-0.15")
-    # LLM Coaching → Difficulty Adjustment
-    arr(ax, 1.03, 0.32, 1.03, 0.28)
     # Difficulty Adjustment → Updated Spec
-    arr(ax, 1.03, 0.235, 1.03, 0.195)
+    arr(ax, 1.03, 0.40, 1.03, 0.36)
     # Updated Spec → Next Trial
-    arr(ax, 1.03, 0.165, 1.03, 0.125)
+    arr(ax, 1.03, 0.33, 1.03, 0.29)
+    # Performance Data → Optional Coaching (advisory side path)
+    arr(ax, 0.76, 0.305, 0.86, 0.14,
+        color=C_LLM, lw=1.2, cs="arc3,rad=0.15")
 
     plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
 
