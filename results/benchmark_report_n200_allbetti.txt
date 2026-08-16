@@ -22,9 +22,9 @@ Total shapes: 2400
 ==============================================================================
   MINDFOLD 3D — GENERATION FIDELITY CHARACTERIZATION
   N = 200 shapes per difficulty cell
-  Date: 2026-08-15T10:08:31.578568
+  Date: 2026-08-16T03:37:43.967537
   Total shapes: 2400
-  Total time: 774.3s
+  Total time: 813.8s
 ==============================================================================
 
 ------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ Total shapes: 2400
   ------------ ---------- ----------------  ----------------------------------------
   low              100.0%  [98.1%, 100.0%]  low:100.0%
   medium           100.0%  [98.1%, 100.0%]  medium:100.0%
-  high              96.0%   [92.3%, 98.0%]  high:96.0%  medium:4.0%
+  high              99.0%   [96.4%, 99.7%]  high:99.0%  medium:1.0%
   expert           100.0%  [98.1%, 100.0%]  expert:100.0%
 
   Feature: branching_factor
@@ -79,9 +79,9 @@ Total shapes: 2400
   Intended           Mean       ±Std        Min        Max      N
   ------------ ---------- ---------- ---------- ---------- ------
   low              0.9750     0.1565     0.0000     1.0000    200
-  medium           2.0050     0.1227     1.0000     3.0000    200
-  high             4.6400     0.5585     3.0000     5.0000    200
-  expert           9.0000     0.0000     9.0000     9.0000    200
+  medium           2.4500     0.5737     1.0000     3.0000    200
+  high             4.8900     0.3442     3.0000     5.0000    200
+  expert           9.4300     0.8769     6.0000    10.0000    200
 
   Feature: number_of_components
   Defined ranges: low:1  medium:1  high:[2,3]  expert:[2,4]
@@ -129,8 +129,8 @@ Total shapes: 2400
   OVERALL SUMMARY
 ------------------------------------------------------------------------------
   spatial_form                  mean fidelity: 99.4%  range: 98.5%–100.0%
-  structural_complexity         mean fidelity: 99.0%  range: 96.0%–100.0%
+  structural_complexity         mean fidelity: 99.8%  range: 99.0%–100.0%
   spatial_scale                 mean fidelity: 100.0%  range: 100.0%–100.0%
 
-  Overall (all dimensions)      mean fidelity: 99.5%  range: 96.0%–100.0%
+  Overall (all dimensions)      mean fidelity: 99.7%  range: 98.5%–100.0%
 

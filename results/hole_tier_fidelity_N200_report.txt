@@ -1,0 +1,137 @@
+============================================================================
+HOLE-TIER FIDELITY STUDY (N=200 per cell) — production code path
+Grid: (11, 11, 11) | Max attempts per shape: 20
+============================================================================
+
+>>> beta_1=1, target_voxels=8 <<<
+    success: 200/200
+    first-pass acceptance: 100.0%
+    mean attempts (when successful): 1.000
+    mu: mean=1.00, range=[1, 1]
+    beta_1: mean=1.00, range=[1, 1]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {}
+    elapsed: 0.3s
+
+>>> beta_1=1, target_voxels=15 <<<
+    success: 200/200
+    first-pass acceptance: 100.0%
+    mean attempts (when successful): 1.000
+    mu: mean=1.59, range=[1, 3]
+    beta_1: mean=1.00, range=[1, 1]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {}
+    elapsed: 0.6s
+
+>>> beta_1=1, target_voxels=20 <<<
+    success: 200/200
+    first-pass acceptance: 98.0%
+    mean attempts (when successful): 1.020
+    mu: mean=5.22, range=[1, 11]
+    beta_1: mean=1.00, range=[1, 1]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 4}
+    elapsed: 0.9s
+
+>>> beta_1=1, target_voxels=25 <<<
+    success: 200/200
+    first-pass acceptance: 92.0%
+    mean attempts (when successful): 1.085
+    mu: mean=7.46, range=[1, 17]
+    beta_1: mean=1.00, range=[1, 1]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 17}
+    elapsed: 1.6s
+
+>>> beta_1=2, target_voxels=20 <<<
+    success: 200/200
+    first-pass acceptance: 99.5%
+    mean attempts (when successful): 1.005
+    mu: mean=2.60, range=[2, 4]
+    beta_1: mean=2.00, range=[2, 2]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 1}
+    elapsed: 0.7s
+
+>>> beta_1=2, target_voxels=25 <<<
+    success: 200/200
+    first-pass acceptance: 98.0%
+    mean attempts (when successful): 1.020
+    mu: mean=2.88, range=[2, 6]
+    beta_1: mean=2.00, range=[2, 2]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 4}
+    elapsed: -0.8s
+
+>>> beta_1=2, target_voxels=30 <<<
+    success: 200/200
+    first-pass acceptance: 95.0%
+    mean attempts (when successful): 1.050
+    mu: mean=3.26, range=[2, 6]
+    beta_1: mean=2.00, range=[2, 2]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 10}
+    elapsed: 2.5s
+
+>>> beta_1=3, target_voxels=22 <<<
+    success: 200/200
+    first-pass acceptance: 99.0%
+    mean attempts (when successful): 1.010
+    mu: mean=3.44, range=[3, 5]
+    beta_1: mean=3.00, range=[3, 3]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_low': 2}
+    elapsed: 1.0s
+
+>>> beta_1=3, target_voxels=25 <<<
+    success: 200/200
+    first-pass acceptance: 96.0%
+    mean attempts (when successful): 1.040
+    mu: mean=3.35, range=[3, 6]
+    beta_1: mean=3.00, range=[3, 3]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 6, 'b1_low': 2}
+    elapsed: 1.2s
+
+>>> beta_1=3, target_voxels=30 <<<
+    success: 200/200
+    first-pass acceptance: 95.0%
+    mean attempts (when successful): 1.055
+    mu: mean=3.37, range=[3, 6]
+    beta_1: mean=3.00, range=[3, 3]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 9, 'b1_low': 2}
+    elapsed: 1.9s
+
+>>> beta_1=4, target_voxels=28 <<<
+    success: 200/200
+    first-pass acceptance: 99.0%
+    mean attempts (when successful): 1.010
+    mu: mean=4.24, range=[4, 7]
+    beta_1: mean=4.00, range=[4, 4]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_low': 1, 'b1_high': 1}
+    elapsed: 1.2s
+
+>>> beta_1=4, target_voxels=30 <<<
+    success: 200/200
+    first-pass acceptance: 97.0%
+    mean attempts (when successful): 1.030
+    mu: mean=4.19, range=[4, 7]
+    beta_1: mean=4.00, range=[4, 4]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 5, 'b1_low': 1}
+    elapsed: 1.4s
+
+>>> beta_1=4, target_voxels=35 <<<
+    success: 200/200
+    first-pass acceptance: 92.5%
+    mean attempts (when successful): 1.080
+    mu: mean=4.32, range=[4, 7]
+    beta_1: mean=4.00, range=[4, 4]
+    voxel drift (template overshoot + cavity closure): mean=0.00, max=0
+    failure modes: {'b1_high': 14, 'b1_low': 2}
+    elapsed: 2.5s
+
+Saved: /mnt/c/Users/Scott/Documents/Work/MindFold3D/results/hole_tier_fidelity_N200.json
+Saved: /mnt/c/Users/Scott/Documents/Work/MindFold3D/results/hole_tier_fidelity_N200.csv

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "date": "2026-08-15T10:08:31.578568",
+    "date": "2026-08-16T03:37:43.967537",
     "n_per_cell": 200,
     "base_seed": 2026,
     "dimensions": [
@@ -15,7 +15,7 @@
       "expert"
     ],
     "total_shapes": 2400,
-    "total_time_seconds": 774.3
+    "total_time_seconds": 813.8
   },
   "results": {
     "spatial_form": {
@@ -213,8 +213,8 @@
         },
         "features": {
           "branching_factor": {
-            "mean": 2.005,
-            "std": 0.1227,
+            "mean": 2.45,
+            "std": 0.5737,
             "min": 1,
             "max": 3,
             "n": 200
@@ -240,22 +240,22 @@
         "n_generated": 200,
         "n_errors": 0,
         "dimension_fidelity": {
-          "fidelity_rate": 0.96,
+          "fidelity_rate": 0.99,
           "n": 200,
           "distribution": {
-            "high": 0.96,
-            "medium": 0.04
+            "high": 0.99,
+            "medium": 0.01
           },
           "ci_95": [
-            0.9231,
-            0.9796
+            0.9643,
+            0.9973
           ],
-          "n_correct": 192
+          "n_correct": 198
         },
         "features": {
           "branching_factor": {
-            "mean": 4.64,
-            "std": 0.5585,
+            "mean": 4.89,
+            "std": 0.3442,
             "min": 3,
             "max": 5,
             "n": 200
@@ -294,10 +294,10 @@
         },
         "features": {
           "branching_factor": {
-            "mean": 9,
-            "std": 0.0,
-            "min": 9,
-            "max": 9,
+            "mean": 9.43,
+            "std": 0.8769,
+            "min": 6,
+            "max": 10,
             "n": 200
           },
           "number_of_components": {
