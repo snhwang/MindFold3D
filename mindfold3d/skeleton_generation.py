@@ -951,6 +951,58 @@ def _choose_random_plane(rng: random.Random) -> Tuple[int, int]:
     return rng.choice([(0, 1), (0, 2), (1, 2)])
 
 
+def _aperture_shell(cells: Set[Tuple[int, int]]) -> Set[Tuple[int, int]]:
+    """In-plane ring of cells around an aperture polyomino.
+
+    The Chebyshev-1 dilation of the aperture minus the aperture itself.
+    For a simply connected aperture this is a connected annulus whose only
+    hole is the aperture, so its depth-1 extrusion is a closed loop with
+    β₁ = 1 wrapping the aperture's reserved column. A 1-cell aperture
+    yields the classic 3×3 ring; larger polyominoes yield rectangular,
+    L-shaped, T-shaped, and irregular rings.
+    """
+    shell: Set[Tuple[int, int]] = set()
+    for (a, b) in cells:
+        for da in (-1, 0, 1):
+            for db in (-1, 0, 1):
+                c = (a + da, b + db)
+                if c not in cells:
+                    shell.add(c)
+    return shell
+
+
+def _grow_aperture(
+    rng: random.Random, cells: Set[Tuple[int, int]]
+) -> Set[Tuple[int, int]]:
+    """Return `cells` plus one random edge-adjacent cell."""
+    frontier = []
+    for (a, b) in cells:
+        for da, db in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            c = (a + da, b + db)
+            if c not in cells:
+                frontier.append(c)
+    return cells | {rng.choice(frontier)}
+
+
+def _chain_offsets(
+    rng: random.Random, num_rings: int, layout: str
+) -> List[Tuple[int, int]]:
+    """Ring positions in step units for a shared-wall chain layout.
+
+    straight: a line along the first in-plane axis. bent: an L-path with
+    one turn (needs 3+ rings). block: the 2×2 window-pane arrangement
+    (exactly 4 rings).
+    """
+    if layout == "block":
+        return [(0, 0), (1, 0), (0, 1), (1, 1)]
+    if layout == "bent" and num_rings >= 3:
+        bend = rng.randint(1, num_rings - 1)
+        return [
+            (min(i, bend), max(0, i - bend)) for i in range(num_rings)
+        ]
+    return [(i, 0) for i in range(num_rings)]
+
+
 def _choose_ring_size(
     grid_size: Tuple[int, int, int],
     plane_axes: Tuple[int, int],
@@ -1027,8 +1079,16 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
             self.voxels = tree.voxels
             return self.voxels
 
+        self.template_mode = "coplanar"
+        self.ring_planes = []
+        self.template_features = {}
         if target_loops == 1:
             self._build_single_ring(spec)
+        elif (
+            getattr(spec, "mixed_orientation", False)
+            and self._build_mixed_rings(spec, min(target_loops, 6))
+        ):
+            self.template_mode = "mixed"
         elif target_loops == 2:
             self._build_double_ring(spec)
         elif target_loops == 3:
@@ -1045,28 +1105,30 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
     # ------------------------------------------------------------------
 
     def _build_single_ring(self, spec: SkeletonSpec) -> None:
+        for _ in range(30):
+            res = self._place_polyomino_ring(
+                spec.voxel_count, set(), set(), dense=spec.packing == "dense"
+            )
+            if res is not None:
+                perim, holes, plane, meta = res
+                self.voxels.update(perim)
+                self.hole_voxels.update(holes)
+                self.ring_planes = [plane]
+                self.template_features = meta
+                return
+        # Last-resort minimal ring (a 1-cell aperture always fits the grid).
         plane = _choose_random_plane(self.rng)
-        min_s = 3
-        size_a, size_b = _choose_ring_size(self.grid_size, plane, self.rng, min_size=min_s)
-        if spec.packing == "dense":
-            size_a = min(size_a, min_s + 1)
-            size_b = min(size_b, min_s + 1)
-        # Respect the voxel budget: shrink the sampled ring until its perimeter
-        # 2(a+b)-4 fits within target_voxels (floor 3x3 = 8 voxels). Without
-        # this cap, small-target specs emit template-sized shapes far above
-        # target (e.g. a 9x9 ring = 32 voxels against an 8-voxel target).
-        while 2 * (size_a + size_b) - 4 > spec.voxel_count and (size_a > min_s or size_b > min_s):
-            if size_a >= size_b and size_a > min_s:
-                size_a -= 1
-            elif size_b > min_s:
-                size_b -= 1
-        center = _choose_ring_center(self.grid_size, plane, size_a, size_b, self.rng)
-        skeleton = _build_rectangle_perimeter(center, plane, size_a, size_b)
-        hole = _build_rectangle_interior_hole(center, plane, size_a, size_b, self.grid_size)
-        for v in skeleton:
+        center = _choose_ring_center(self.grid_size, plane, 3, 3, self.rng)
+        for v in _build_rectangle_perimeter(center, plane, 3, 3):
             if self.in_bounds(v):
                 self.add_voxel(v)
-        self.hole_voxels.update(v for v in hole if self.in_bounds(v))
+        self.hole_voxels.update(
+            v
+            for v in _build_rectangle_interior_hole(
+                center, plane, 3, 3, self.grid_size
+            )
+            if self.in_bounds(v)
+        )
 
     def _build_double_ring(self, spec: SkeletonSpec) -> None:
         plane = _choose_random_plane(self.rng)
@@ -1103,26 +1165,26 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
             self.hole_voxels.update(v for v in hole if self.in_bounds(v))
 
     def _build_ring_chain(self, spec: SkeletonSpec, num_rings: int) -> None:
+        for _ in range(30):
+            res = self._place_square_chain(
+                num_rings, spec.voxel_count, set(), set()
+            )
+            if res is not None:
+                perim, holes, plane, meta = res
+                self.voxels.update(perim)
+                self.hole_voxels.update(holes)
+                self.ring_planes = [plane] * num_rings
+                self.template_features = meta
+                return
+        # Last-resort straight chain at minimum size (always fits 11³ for
+        # up to 4 rings: chain length 4·2+1 = 9).
         plane = _choose_random_plane(self.rng)
         ax1, ax2 = plane
         ax3 = 3 - ax1 - ax2
-        min_s = 3
-        margin = 2
-        avail = self.grid_size[ax1] - margin
-        max_s_for_chain = (avail - 1) // num_rings + 1
-        max_s_grid = self.grid_size[ax2] - margin
-        max_s = min(max_s_for_chain, max_s_grid, 4)
-        if max_s < min_s:
-            max_s = min_s
-            num_rings = max(1, (self.grid_size[ax1] - margin - 1) // (min_s - 1))
-        size = self.rng.randint(min_s, max(min_s, max_s))
-        # Budget cap: a k-ring chain of side s uses k(4s-4) - (k-1)s skeleton
-        # voxels; shrink s so the template fits the target count.
-        while size > min_s and num_rings * (4 * size - 4) - (num_rings - 1) * size > spec.voxel_count:
-            size -= 1
+        size = 3
         step = size - 1
         chain_len = num_rings * step + 1
-        start_ax1 = self.rng.randint(1, max(1, self.grid_size[ax1] - chain_len))
+        start_ax1 = self.rng.randint(0, max(0, self.grid_size[ax1] - chain_len))
         c2 = self.rng.randint(size // 2, self.grid_size[ax2] - 1 - size // 2)
         c3 = self.rng.randint(0, self.grid_size[ax3] - 1)
         for i in range(num_rings):
@@ -1140,6 +1202,304 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
                 if self.in_bounds(v):
                     self.add_voxel(v)
             self.hole_voxels.update(v for v in hole if self.in_bounds(v))
+
+    # ------------------------------------------------------------------
+    # Template placement engines (polyomino rings and square chains)
+    # ------------------------------------------------------------------
+
+    def _place_polyomino_ring(
+        self,
+        share: int,
+        forbidden_perims: Set[_Voxel],
+        forbidden_holes: Set[_Voxel],
+        dense: bool = False,
+    ):
+        """Sample one polyomino-aperture ring fitting `share` voxels.
+
+        The aperture starts as one cell and grows stochastically while the
+        surrounding shell still fits the budget, so hole cross-sections
+        range from 1×1 through rectangles to L-, T-, and S-shaped
+        polyominoes. When budget remains, the ring extrudes 2-3 layers
+        along the tunnel axis, turning a thin ring into a bore. Returns
+        (perimeter, reserved, plane, meta) or None if placement failed.
+        """
+        plane = _choose_random_plane(self.rng)
+        ax1, ax2 = plane
+        ax3 = 3 - ax1 - ax2
+        aperture = {(0, 0)}
+        shell = _aperture_shell(aperture)
+        if not dense:
+            while self.rng.random() < 0.45:
+                grown = _grow_aperture(self.rng, aperture)
+                gshell = _aperture_shell(grown)
+                if len(gshell) > share:
+                    break
+                aperture, shell = grown, gshell
+        d_max = max(1, share // len(shell))
+        depth = 1
+        if d_max >= 2:
+            r = self.rng.random()
+            if d_max >= 3 and r < 0.2:
+                depth = 3
+            elif r < 0.5:
+                depth = 2
+        cells = aperture | shell
+        lo1 = min(c[0] for c in cells)
+        hi1 = max(c[0] for c in cells)
+        lo2 = min(c[1] for c in cells)
+        hi2 = max(c[1] for c in cells)
+        if (
+            hi1 - lo1 >= self.grid_size[ax1]
+            or hi2 - lo2 >= self.grid_size[ax2]
+            or depth > self.grid_size[ax3]
+        ):
+            return None
+        off1 = self.rng.randint(-lo1, self.grid_size[ax1] - 1 - hi1)
+        off2 = self.rng.randint(-lo2, self.grid_size[ax2] - 1 - hi2)
+        c3 = self.rng.randint(0, self.grid_size[ax3] - depth)
+        perim: Set[_Voxel] = set()
+        for layer in range(depth):
+            for (a, b) in shell:
+                v = [0, 0, 0]
+                v[ax1] = a + off1
+                v[ax2] = b + off2
+                v[ax3] = c3 + layer
+                perim.add(tuple(v))
+        holes: Set[_Voxel] = set()
+        for (a, b) in aperture:
+            for k in range(self.grid_size[ax3]):
+                v = [0, 0, 0]
+                v[ax1] = a + off1
+                v[ax2] = b + off2
+                v[ax3] = k
+                holes.add(tuple(v))
+        if perim & forbidden_holes:
+            return None
+        if holes & forbidden_perims:
+            return None
+        if perim & forbidden_perims:
+            return None
+        meta = {"aperture": len(aperture), "depth": depth}
+        return perim, holes, plane, meta
+
+    def _place_square_chain(
+        self,
+        g: int,
+        share: int,
+        forbidden_perims: Set[_Voxel],
+        forbidden_holes: Set[_Voxel],
+    ):
+        """Sample a shared-wall chain of g square rings fitting `share`.
+
+        Layout is straight, bent (an L-path, 3+ rings), or the 2×2 block
+        (4 rings), sampled randomly. Returns (perimeter, reserved, plane,
+        meta) or None if placement failed.
+        """
+        plane = _choose_random_plane(self.rng)
+        ax1, ax2 = plane
+        ax3 = 3 - ax1 - ax2
+        r = self.rng.random()
+        if g == 4 and r < 0.3:
+            layout = "block"
+        elif g >= 3 and r < 0.6:
+            layout = "bent"
+        else:
+            layout = "straight"
+        offsets = _chain_offsets(self.rng, g, layout)
+        size = self.rng.randint(3, 4)
+        for s in (size, 3):
+            step = s - 1
+            span1 = (max(o[0] for o in offsets)) * step + s
+            span2 = (max(o[1] for o in offsets)) * step + s
+            if span1 > self.grid_size[ax1] or span2 > self.grid_size[ax2]:
+                continue
+            start1 = self.rng.randint(0, self.grid_size[ax1] - span1)
+            start2 = self.rng.randint(0, self.grid_size[ax2] - span2)
+            c3 = self.rng.randint(0, self.grid_size[ax3] - 1)
+            perim: Set[_Voxel] = set()
+            holes: Set[_Voxel] = set()
+            for (o1, o2) in offsets:
+                center = [0, 0, 0]
+                center[ax1] = start1 + o1 * step + s // 2
+                center[ax2] = start2 + o2 * step + s // 2
+                center[ax3] = c3
+                perim |= _build_rectangle_perimeter(tuple(center), plane, s, s)
+                holes |= _build_rectangle_interior_hole(
+                    tuple(center), plane, s, s, self.grid_size
+                )
+            if len(perim) > share and s > 3:
+                continue
+            if not all(self.in_bounds(v) for v in perim):
+                continue
+            if perim & forbidden_holes:
+                continue
+            if holes & forbidden_perims:
+                continue
+            if perim & forbidden_perims:
+                continue
+            return perim, holes, plane, {"layout": layout, "size": s}
+        return None
+
+    # ------------------------------------------------------------------
+    # Mixed-orientation templates (experimental)
+    # ------------------------------------------------------------------
+
+    def _build_mixed_rings(self, spec: SkeletonSpec, num_rings: int) -> bool:
+        """Place rings in independently drawn planes, collision-aware.
+
+        Each ring samples its own plane, size, and center. A placement is
+        valid when the new perimeter avoids every existing reserved column,
+        the new reserved column avoids every existing perimeter, and no two
+        perimeters share a voxel (face adjacency is allowed; validation
+        rejects any accidental topology it creates). Disconnected rings are
+        then bridged by shortest arms grown through free cells, so the
+        β₁ ≥ k lower-bound argument is unchanged: every reserved column is
+        still inviolable and an arm can never cap a tunnel without entering
+        one. Returns False when no placement fits the voxel budget, and the
+        caller falls back to the coplanar shared-wall chain.
+        """
+        min_s = 3
+        budget = spec.voxel_count
+        self.ring_planes: List[Tuple[int, int]] = []
+        for _ in range(40):
+            # Partition the rings into shared-wall groups of 1-3 rings.
+            # Each group gets its own randomly drawn plane, so wall-sharing
+            # keeps the skeleton within tight budgets while orientations
+            # still differ between groups. About a third of shapes allow a
+            # single-group partition, which is the classic shared-wall chain
+            # in a random plane, so that layout stays in the stimulus
+            # distribution alongside the separated and mixed ones.
+            allow_single_group = self.rng.random() < 0.35
+            group_sizes: List[int] = []
+            remaining = num_rings
+            while remaining > 0:
+                # A whole-partition group of 4 is allowed in the
+                # single-group case so the 2×2 block layout stays
+                # reachable; otherwise groups cap at 3 rings.
+                if allow_single_group and not group_sizes:
+                    hi = min(4, remaining)
+                else:
+                    hi = min(3, remaining)
+                if not group_sizes and num_rings >= 2 and not allow_single_group:
+                    hi = min(hi, num_rings - 1)
+                g = self.rng.randint(1, hi)
+                group_sizes.append(g)
+                remaining -= g
+            if num_rings >= 2 and len(group_sizes) < 2 and not allow_single_group:
+                continue
+
+            perims: List[Set[_Voxel]] = []
+            holes: List[Set[_Voxel]] = []
+            planes: List[Tuple[int, int]] = []
+            metas: List[Dict[str, Any]] = []
+            ok = True
+            for g in group_sizes:
+                # Budget share for this group, holding back an allowance
+                # for bridging arms.
+                share = max(
+                    g * (4 * min_s - 4) - (g - 1) * min_s,
+                    (budget - 3 * (len(group_sizes) - 1)) * g // num_rings,
+                )
+                all_perims: Set[_Voxel] = set().union(*perims) if perims else set()
+                all_holes: Set[_Voxel] = set().union(*holes) if holes else set()
+                placed = False
+                for _try in range(60):
+                    if g == 1:
+                        res = self._place_polyomino_ring(
+                            share, all_perims, all_holes
+                        )
+                    else:
+                        res = self._place_square_chain(
+                            g, share, all_perims, all_holes
+                        )
+                    if res is None:
+                        continue
+                    g_perim, g_holes, plane, meta = res
+                    perims.append(g_perim)
+                    holes.append(g_holes)
+                    planes.extend([plane] * g)
+                    metas.append(meta)
+                    placed = True
+                    break
+                if not placed:
+                    ok = False
+                    break
+            if not ok:
+                continue
+            if sum(len(p) for p in perims) > budget:
+                continue
+            self.voxels = set().union(*perims)
+            self.hole_voxels = set().union(*holes)
+            if self._bridge_components(budget):
+                self.ring_planes = planes
+                self.template_features = {"groups": metas}
+                return True
+            self.voxels.clear()
+            self.hole_voxels.clear()
+        return False
+
+    def _bridge_components(self, budget: int) -> bool:
+        """Connect skeleton components with shortest arms through free cells.
+
+        Repeated multi-source BFS from the first component through cells
+        that are neither shape nor reserved, adding the discovered path and
+        re-labeling until the skeleton is one component. Returns False if
+        connectivity cannot be reached within the voxel budget.
+        """
+        from collections import deque
+
+        while True:
+            comps = self._label_components()
+            if len(comps) <= 1:
+                return len(self.voxels) <= budget
+            if len(self.voxels) > budget:
+                return False
+            src = comps[0]
+            others: Set[_Voxel] = set().union(*comps[1:])
+            parent: Dict[_Voxel, _Voxel] = {}
+            visited: Set[_Voxel] = set(src)
+            queue: deque = deque(src)
+            goal: 'Optional[_Voxel]' = None
+            while queue and goal is None:
+                v = queue.popleft()
+                for n in _get_neighbors(v, self.grid_size, include_diagonal=False):
+                    if n in visited:
+                        continue
+                    if n in others:
+                        goal = v
+                        break
+                    if n in self.voxels or n in self.hole_voxels:
+                        continue
+                    visited.add(n)
+                    parent[n] = v
+                    queue.append(n)
+            if goal is None:
+                return False
+            v = goal
+            while v not in self.voxels:
+                self.add_voxel(v)
+                v = parent[v]
+
+    def _label_components(self) -> List[Set[_Voxel]]:
+        """6-connected components of the current skeleton."""
+        from collections import deque
+
+        remaining = set(self.voxels)
+        comps: List[Set[_Voxel]] = []
+        while remaining:
+            seed = next(iter(remaining))
+            comp = {seed}
+            queue: deque = deque([seed])
+            remaining.discard(seed)
+            while queue:
+                v = queue.popleft()
+                for n in _get_neighbors(v, self.grid_size, include_diagonal=False):
+                    if n in remaining:
+                        remaining.discard(n)
+                        comp.add(n)
+                        queue.append(n)
+            comps.append(comp)
+        return comps
 
     # ------------------------------------------------------------------
     # Fill and cavity closure
@@ -1246,7 +1606,26 @@ class HoleMarkedLoopSkeleton(SkeletonRule):
         # Lazy import: topology_extras depends on shape_generation which
         # depends on this module transitively; keep the import local.
         from mindfold3d.topology_extras import cubical_betti_1
-        return cubical_betti_1(self.voxels) == target
+        if cubical_betti_1(self.voxels) != target:
+            return False
+        # Branching gate for Structural Complexity tiers. Separated
+        # mixed-orientation layouts have no shared-wall junctions, so
+        # junction-biased fill alone leaves a tail of shapes below the
+        # tier's branching range, where branching and components outvote
+        # β₁ and the shape reclassifies downward. Gating converts that
+        # fidelity loss into regeneration cost, like the Spatial Form
+        # gate. Applies only when the spec carries a named SC tier (the
+        # game and fidelity-study path).
+        sc_tier = (spec.shape_difficulties or {}).get("structural_complexity")
+        if sc_tier in ("high", "expert"):
+            from mindfold3d.cognitive_mapping import SHAPE_DIMENSIONS
+            lo, hi = SHAPE_DIMENSIONS["structural_complexity"]["features"][
+                "branching_factor"
+            ][sc_tier]
+            bf = _calculate_branching_factor(self.voxels, self.grid_size)
+            if not (lo <= bf <= hi):
+                return False
+        return True
 
 
 def _compute_symmetry_score_for_gate(vs: Set[Tuple[int, int, int]]) -> float:
@@ -1793,6 +2172,7 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
 
     # Multi-component shapes are assembled from isolated blobs, not single skeleton runs
     attempts_used = 0
+    template_mode = None
     if spec.num_components > 1:
         best_voxels = _build_multi_component(spec)
     else:
@@ -1840,10 +2220,12 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
 
             if structurally_valid:
                 best_voxels = skeleton.voxels
+                template_mode = getattr(skeleton, "template_mode", None)
                 validated = True
                 break
             if best_voxels is None:
                 best_voxels = skeleton.voxels
+                template_mode = getattr(skeleton, "template_mode", None)
 
         # Hole tiers carry a per-shape certification guarantee (cubical
         # β₁ = target on every emitted shape). Emitting an uncertified shape
@@ -1957,4 +2339,5 @@ def generate_shape_skeleton(spec: SkeletonSpec, max_attempts: int = 5) -> Dict[s
         "generation_mode": "skeleton",
         "archetype": archetype,
         "attempts": attempts_used,
+        "template_mode": template_mode,
     }

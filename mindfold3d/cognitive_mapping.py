@@ -298,6 +298,11 @@ class SkeletonSpec:
     # post-generation geometric optimizer is bypassed to preserve topology.
     target_b1: Optional[int] = None
     skip_optimizer: bool = False
+    # Experimental: place multi-hole rings in independently drawn planes
+    # (collision-aware, arm-bridged) instead of one coplanar shared-wall
+    # chain. Falls back to the coplanar template when placement does not
+    # fit the budget.
+    mixed_orientation: bool = False
     # Source cognitive difficulties (for verification)
     shape_difficulties: Dict[str, str] = field(default_factory=dict)
     task_difficulties: Dict[str, str] = field(default_factory=dict)
@@ -487,8 +492,13 @@ def get_skeleton_spec(
     # connected shape) and require the template feasibility floor on voxels.
     if num_loops >= 1:
         archetype = "hole"
+        floors = (
+            MIXED_B1_VOXEL_FLOORS
+            if MIXED_ORIENTATION_ENABLED and num_loops >= 2
+            else HOLE_B1_VOXEL_FLOORS
+        )
         resolved_voxel_count = max(
-            resolved_voxel_count, HOLE_B1_VOXEL_FLOORS.get(num_loops, 8)
+            resolved_voxel_count, floors.get(num_loops, 8)
         )
         num_components = 1
     else:
@@ -537,6 +547,9 @@ def get_skeleton_spec(
         planarity=planarity,
         packing=packing,
         target_b1=num_loops if archetype == "hole" else None,
+        mixed_orientation=(
+            MIXED_ORIENTATION_ENABLED and archetype == "hole" and num_loops >= 2
+        ),
         shape_difficulties=sd,
         task_difficulties=td,
     )
@@ -569,6 +582,23 @@ HOLE_TIER_GRID: Tuple[int, int, int] = (11, 11, 11)
 # can reach its branching-factor range (4-5) via junction-biased fill.
 HOLE_B1_VOXEL_FLOORS: Dict[int, int] = {1: 8, 2: 17, 3: 20, 4: 24}
 
+# Mixed-orientation templates replace the single coplanar chain with
+# shared-wall groups in independently drawn planes. Separate groups cost
+# more skeleton voxels than one chain (k=2: two 3x3 rings = 16 + arm;
+# k=3: a pair plus a single = 21 + arm; k=4: two pairs = 26 + arm), so
+# the mixed floors sit above HOLE_B1_VOXEL_FLOORS. Below the mixed floor
+# the builder would always fall back to the coplanar chain.
+MIXED_B1_VOXEL_FLOORS: Dict[int, int] = {1: 8, 2: 20, 3: 22, 4: 28}
+# k=2 floor is 20, not the coplanar 17: separated rings have no shared-wall
+# junctions, so without ~3 fill voxels for junction-biased growth the
+# measured branching factor lands in the Medium range and outvotes β₁
+# (observed as an SC-High fidelity drop to 81% at a 17-voxel floor).
+
+# Game-wide switch: cyclic tiers request mixed-orientation templates so
+# multi-hole stimuli vary tunnel direction within a shape. The published
+# studies (paper-v7.1) predate this and use the coplanar templates.
+MIXED_ORIENTATION_ENABLED = True
+
 
 def get_hole_tier_spec(
     tier: str,
@@ -592,7 +622,11 @@ def get_hole_tier_spec(
         raise ValueError(f"Unknown hole tier {tier!r}; expected one of {list(HOLE_TIERS)}")
     cfg = HOLE_TIERS[tier]
     lo, hi = cfg["voxel_range"]
+    mixed = MIXED_ORIENTATION_ENABLED and cfg["target_b1"] >= 2
+    if mixed:
+        lo = max(lo, MIXED_B1_VOXEL_FLOORS.get(cfg["target_b1"], lo))
     vc = cfg["default_voxels"] if target_voxel_count is None else max(lo, min(hi, target_voxel_count))
+    vc = max(vc, lo)
     k = cfg["target_b1"]
     return SkeletonSpec(
         archetype="hole",
@@ -606,6 +640,7 @@ def get_hole_tier_spec(
         packing="medium",
         target_b1=k,
         skip_optimizer=True,
+        mixed_orientation=mixed,
         shape_difficulties={"structural_complexity": tier},
         task_difficulties={},
     )

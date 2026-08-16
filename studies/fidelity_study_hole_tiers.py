@@ -64,6 +64,10 @@ def _make_spec(num_loops: int, voxel_count: int) -> SkeletonSpec:
         packing="medium",
         target_b1=num_loops,
         skip_optimizer=True,
+        # Mirrors production: multi-hole specs use mixed-orientation
+        # templates (shared-wall groups in independently drawn planes,
+        # with polyomino apertures and bent/block layouts).
+        mixed_orientation=num_loops >= 2,
     )
 
 
@@ -174,11 +178,13 @@ def study_cell(num_loops: int, voxel_count: int, n_shapes: int = N_SHAPES_PER_CE
 
 def main(n_shapes: int = N_SHAPES_PER_CELL):
     tier_configs = [
-        # (beta_1_target, target_voxels)
+        # (beta_1_target, target_voxels): template minimum (the production
+        # voxel floor, MIXED_B1_VOXEL_FLOORS for multi-hole tiers), an
+        # intermediate point, and the fill ceiling.
         (1, 8), (1, 15), (1, 20), (1, 25),
-        (2, 14), (2, 20), (2, 25), (2, 30),
-        (3, 20), (3, 25), (3, 30),
-        (4, 24), (4, 30), (4, 35),
+        (2, 20), (2, 25), (2, 30),
+        (3, 22), (3, 25), (3, 30),
+        (4, 28), (4, 30), (4, 35),
     ]
 
     print("=" * 76)
